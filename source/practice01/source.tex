@@ -1,0 +1,269 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2025
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 1: Рисуем треугольник}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\usemintedstyle{solarized-light}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{}
+\textbf{О практиках}
+\begin{itemize}
+\item Задания идут \textit{последовательно}, полагаясь на предыдущие задания этой же практики
+\item Иногда задания \textit{перекрывают} предыдущие задания, тогда нужно \textit{закомментировать код предыдущего задания}, чтобы его тоже можно было проверить
+\item Некоторые задания занимают \textit{больше одного слайда} :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{}
+\textbf{О практиках}
+\begin{itemize}
+\item Вся инициализация спрятана от вас в мини-библиотеку \nolinkurl{wgpu_app}
+\item В C++ из неё вам будут нужны \mintinline{cpp}|app.device()|, \mintinline{cpp}|app.queue()|, \mintinline{cpp}|app.surface_format()|
+\item В Rust из неё вам будут нужны \mintinline{cpp}|gpu.device| и \mintinline{cpp}|gpu.queue|, \mintinline{cpp}|gpu.surface_format|
+\item Для C++ в репозитории есть маленькая библиотека математики -- её использовать можно \textbf{только с третьей практики} :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{}
+\textbf{О практиках}
+\begin{itemize}
+\item Мы постоянно будем загружать файлы с шейдерами, 3D моделями, текстурами, сценами
+\item Они будут лежать в корне конкретной практики
+\item Для удобства в C++ уже есть константа \mintinline{cpp}|projectRoot|, в Rust -- \mintinline{rust}|PROJECT_ROOT|
+\item В C++ есть вспомогательная функция \mintinline{cpp}|loadFile| в \mintinline{cpp}|<file_utils.hpp>|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{}
+\textbf{Работа с WebGPU}
+\begin{itemize}
+\item Функции создания WebGPU-объектов всегда принимают т.н. \textit{descriptor} -- небольшую структуру с описанием объекта
+\item В C++ вместо них можно передавать \mintinline{cpp}|nullptr|, если вам подойдёт дефолтная настройка
+\item На C++ их удобно инициализировать специальными макросами, например
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+WGPURenderPassColorAttachment colorAttachment =
+    WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+\end{tcblisting}
+\item На Rust можно использовать
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+wgpu::RenderPassColorAttachment {
+    // описание полей...
+    ..Default::default()
+}
+\end{tcblisting}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{}
+\textbf{Работа с WebGPU}
+\begin{itemize}
+\item Так как \nolinkurl{wgpu-native} -- API для языка C, массивы в дескрипторах задаются как количество элементов + указатель на первый элемент, например
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+struct WGPUFragmentState {
+    // ...
+    size_t targetCount;
+    WGPUColorTargetState const * targets;
+};
+\end{tcblisting}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{}
+\textbf{Работа с WebGPU}
+\begin{itemize}
+\item В C++ все созданные объекты нужно удалить, когда они не нужны, иначе будут утечки памяти
+\pause
+\item Это делается функциями вида \mintinline{cpp}|wgpuCommandBufferRelease|
+\pause
+\item На самом деле \nolinkurl{wgpu} держит счётчик ссылок на объекты, так что делать \textit{release} не страшно, даже если \nolinkurl{wgpu} внутри всё ещё использует объект
+\pause
+\item В Rust \nolinkurl{wgpu} делает это автоматически (через Drop trait)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+\begin{itemize}
+\item Создаём \textbf{command encoder} -- объект, позволяющий записать последовательность команд для выполнения на GPU
+\item Превращаем его в \textbf{command buffer} -- собственно последовательность команд
+\item Отправляем их в \textbf{очередь команд} для исполнения -- пока ни одной команды нет, так что ничего интересного не произойдёт
+\item Всё это в основном цикле рендеринга, сразу после \mintinline{rust}|surface_texture.create_view|.
+\begin{itemize}
+\item C++: \mintinline{cpp}|wgpuDeviceCreateCommandEncoder()|, \mintinline{cpp}|wgpuCommandEncoderFinish()|, \mintinline{cpp}|wgpuQueueSubmit()|, не забываем про release
+\item Rust: \mintinline{rust}|device.create_command_encoder()|, \mintinline{rust}|encoder.finish()|, \mintinline{rust}|queue.submit()|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\begin{itemize}
+\item Через command encoder создаём \textbf{render pass}, который очистит наш экран фиксированным цветом
+\item Привязываем к нему \textbf{color attachment}, привязанный к нашему экрану (C++: \mintinline{cpp}|target|, Rust: \mintinline{rust}|view|)
+\item \mintinline{cpp}|StoreOp| -- \mintinline{cpp}|StoreOp|, \mintinline{cpp}|LoadOp| -- \mintinline{cpp}|Clear|, цвет выберите сами
+\item Всё это \textbf{до} \mintinline{rust}|encoder.finish()|
+\begin{itemize}
+\item C++: \mintinline{cpp}|WGPURenderPassColorAttachment|, \mintinline{cpp}|WGPURenderPassDescriptor|, \mintinline{cpp}|wgpuCommandEncoderBeginRenderPass()|, \mintinline{cpp}|wgpuRenderPassEncoderEnd()|
+\item Rust: \mintinline{rust}|encoder.begin_render_pass()|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{task_2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\begin{itemize}
+\item Пишем наш первый шейдер: создаём файл \nolinkurl{shader.wgsl} с магическим содержанием
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@vertex
+fn vertexMain(@builtin(vertex_index) vertexIndex: u32)
+    -> @builtin(position) vec4f 
+{
+    var positions = array<vec2f, 3>(
+        vec2f( 0.0,  0.5),
+        vec2f(-0.5, -0.5),
+        vec2f( 0.5, -0.5),
+    );
+    return vec4f(positions[vertexIndex], 0.0, 1.0);
+}
+
+@fragment
+fn fragmentMain() -> @location(0) vec4f {
+    return vec4f(0.95, 0.35, 0.15, 1.0);
+}
+\end{tcblisting}
+\usemintedstyle{solarized-light}
+\item (цвет во \mintinline{rust}|fragmentMain| можно выбрать любой)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+\begin{itemize}
+\item При инициализации программы (до \mintinline{cpp}|while (running)| в C++, \mintinline{cpp}|WgpuApp::new| в Rust) загружаем наш файл с кодом шейдера и создаём \textbf{shader module}
+\item Он просто скомпилируется, но пока не используется -- попробуйте сделать в нём ошибку (например, добавить лишнюю запятую) и увидеть, что компиляция падает с ошибкой
+\item C++: \mintinline{cpp}|WGPUShaderSourceWGSL|, \mintinline{cpp}|WGPUShaderModuleDescriptor|, \mintinline{cpp}|wgpuDeviceCreateShaderModule()|
+\item Rust: \mintinline{rust}|device.create_shader_module()|, \mintinline{rust}|wgpu::ShaderSource::Wgsl|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\begin{itemize}
+\item Создаём \textbf{render pipeline} -- основной объект, описывающий, что, как, и в каком формате рисовать
+\item Важно заполнить:
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+VertexState
+    module = созданный нами shader module
+    entry_point = "vertexMain"
+FragmentState
+    module = созданный нами shader module
+    entry_point = "fragmentMain"
+    targets = [{
+        format = app.surfaceFormat()
+        write_mask = ALL
+    }]
+PrimitiveState
+    topology = TriangleList
+\end{tcblisting}
+\usemintedstyle{solarized-light}
+\item Остальное можно оставить дефолтами
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\begin{itemize}
+\item Пока мы не используем этот pipeline, так что ничего не произойдёт
+\item C++: \mintinline{cpp}|WGPUColorTargetState|, \mintinline{cpp}|WGPUFragmentState|, \mintinline{cpp}|WGPURenderPipelineDescriptor|, \mintinline{cpp}|wgpuDeviceCreateRenderPipeline()|
+\item Rust: \mintinline{rust}|device.create_render_pipeline()|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\begin{itemize}
+\item Используем созданный \textbf{render pipeline}: перед \mintinline{rust}|encoder.end()| устанавливаем наш pipeline и вызываем рисование одного треугольника
+\item \nolinkurl{vertex_count = 3}, \nolinkurl{instance_count = 1}, \nolinkurl{first_vertex} и \nolinkurl{first_instance} по нулям
+\item Должен появиться цветной треугольник :)
+\item C++: \mintinline{cpp}|wgpuRenderPassEncoderSetPipeline|, \mintinline{cpp}|wgpuRenderPassEncoderDraw()|
+\item Rust: \mintinline{rust}|encoder.set_pipeline()|, \mintinline{rust}|encoder.draw()|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\slideimage{task_6.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+\begin{itemize}
+\item Раскрашиваем треугольник в шахматном порядке
+\item Нужно как-то изменить \mintinline{rust}|fragmentMain| в коде шейдера
+\item Полезные переменные и функции WGSL: \mintinline{rust}|@builtin(position)|, \mintinline{rust}|modf()|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+\slideimage{task_7.png}
+\end{frame}
+
+\end{document}
