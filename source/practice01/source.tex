@@ -62,8 +62,7 @@
 \textbf{О практиках}
 \begin{itemize}
 \item Вся инициализация спрятана от вас в мини-библиотеку \nolinkurl{wgpu_app}
-\item В C++ из неё вам будут нужны \mintinline{cpp}|app.device()|, \mintinline{cpp}|app.queue()|, \mintinline{cpp}|app.surface_format()|
-\item В Rust из неё вам будут нужны \mintinline{cpp}|gpu.device| и \mintinline{cpp}|gpu.queue|, \mintinline{cpp}|gpu.surface_format|
+\item Из неё вам будут нужны \mintinline{cpp}|app.device|, \mintinline{cpp}|app.queue|, \mintinline{cpp}|app.surface_format|
 \item Для C++ в репозитории есть маленькая библиотека математики -- её использовать можно \textbf{только с третьей практики} :)
 \end{itemize}
 \end{frame}
@@ -149,7 +148,7 @@ struct WGPUFragmentState {
 \frametitle{Задание 2}
 \begin{itemize}
 \item Через command encoder создаём \textbf{render pass}, который очистит наш экран фиксированным цветом
-\item Привязываем к нему \textbf{color attachment}, привязанный к нашему экрану (C++: \mintinline{cpp}|target|, Rust: \mintinline{rust}|view|)
+\item Привязываем к нему \textbf{color attachment}, привязанный к нашему экрану (\mintinline{rust}|target_view|)
 \item \mintinline{cpp}|StoreOp| -- \mintinline{cpp}|StoreOp|, \mintinline{cpp}|LoadOp| -- \mintinline{cpp}|Clear|, цвет выберите сами
 \item Всё это \textbf{до} \mintinline{rust}|encoder.finish()|
 \begin{itemize}
@@ -216,7 +215,7 @@ FragmentState
     module = созданный нами shader module
     entry_point = "fragmentMain"
     targets = [{
-        format = app.surfaceFormat()
+        format = app.surface_format
         write_mask = ALL
     }]
 PrimitiveState
