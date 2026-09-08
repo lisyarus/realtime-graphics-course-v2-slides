@@ -84,11 +84,12 @@
 \begin{itemize}
 \item Функции создания WebGPU-объектов всегда принимают т.н. \textit{descriptor} -- небольшую структуру с описанием объекта
 \item В C++ вместо них можно передавать \mintinline{cpp}|nullptr|, если вам подойдёт дефолтная настройка
-\item На C++ их удобно инициализировать специальными макросами, например
+\item На C++ их лучше инициализировать специальными макросами, например
 \usemintedstyle{lightbulb}
 \begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
 WGPURenderPassColorAttachment colorAttachment =
     WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+// заполнение полей colorAttachment ...
 \end{tcblisting}
 \item На Rust можно использовать
 \begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
@@ -149,7 +150,7 @@ struct WGPUFragmentState {
 \begin{itemize}
 \item Через command encoder создаём \textbf{render pass}, который очистит наш экран фиксированным цветом
 \item Привязываем к нему \textbf{color attachment}, привязанный к нашему экрану (\mintinline{rust}|target_view|)
-\item \mintinline{cpp}|StoreOp| -- \mintinline{cpp}|StoreOp|, \mintinline{cpp}|LoadOp| -- \mintinline{cpp}|Clear|, цвет выберите сами
+\item \mintinline{cpp}|StoreOp = Store|, \mintinline{cpp}|LoadOp = Clear|, цвет выберите сами
 \item Всё это \textbf{до} \mintinline{rust}|encoder.finish()|
 \begin{itemize}
 \item C++: \mintinline{cpp}|WGPURenderPassColorAttachment|, \mintinline{cpp}|WGPURenderPassDescriptor|, \mintinline{cpp}|wgpuCommandEncoderBeginRenderPass()|, \mintinline{cpp}|wgpuRenderPassEncoderEnd()|
@@ -197,6 +198,9 @@ fn fragmentMain() -> @location(0) vec4f {
 \item При инициализации программы (до \mintinline{cpp}|while (running)| в C++, \mintinline{cpp}|WgpuApp::new| в Rust) загружаем наш файл с кодом шейдера и создаём \textbf{shader module}
 \item Он просто скомпилируется, но пока не используется -- попробуйте сделать в нём ошибку (например, добавить лишнюю запятую) и увидеть, что компиляция падает с ошибкой
 \item C++: \mintinline{cpp}|WGPUShaderSourceWGSL|, \mintinline{cpp}|WGPUShaderModuleDescriptor|, \mintinline{cpp}|wgpuDeviceCreateShaderModule()|
+\begin{itemize}
+\item Нужно будет сделать \mintinline{cpp}|shaderModuleDescriptor.nextInChain = &shaderSourceWGSL.chain;|
+\end{itemize}
 \item Rust: \mintinline{rust}|device.create_shader_module()|, \mintinline{rust}|wgpu::ShaderSource::Wgsl|
 \end{itemize}
 \end{frame}
@@ -241,7 +245,7 @@ PrimitiveState
 \item \nolinkurl{vertex_count = 3}, \nolinkurl{instance_count = 1}, \nolinkurl{first_vertex} и \nolinkurl{first_instance} по нулям
 \item Должен появиться цветной треугольник :)
 \item C++: \mintinline{cpp}|wgpuRenderPassEncoderSetPipeline|, \mintinline{cpp}|wgpuRenderPassEncoderDraw()|
-\item Rust: \mintinline{rust}|encoder.set_pipeline()|, \mintinline{rust}|encoder.draw()|
+\item Rust: \mintinline{rust}|render_pass.set_pipeline()|, \mintinline{rust}|render_pass.draw()|
 \end{itemize}
 \end{frame}
 
