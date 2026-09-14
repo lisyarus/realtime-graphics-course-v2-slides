@@ -1,0 +1,1208 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2025
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{codebg}{RGB}{29,35,49}
+\setminted{fontsize=\footnotesize}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\usemintedstyle{tango}
+
+\title{Компьютерная графика}
+\subtitle{Лекция 2: Асинхронность, растеризация, графический конвейер, шейдеры, интерполяция, аффинные преобразования}
+\date{2025}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Асинхронность GPU}
+\begin{itemize}
+\item GPU -- отдельное периферийное устройство
+\pause
+\begin{itemize}
+\item К нему нет прямого доступа
+\pause
+\item Одновременно используется несколькими процессами
+\pause
+\item Одновременно выполняет несколько задач
+\end{itemize}
+\pause
+\item Все команды оно выполняет \textit{асинхронно}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Асинхронность GPU и SIMD}
+\pause
+\begin{itemize}
+\item SIMD -- Single Instruction, Multiple Data
+\pause
+\item GPU -- как SIMD-расширения процессоров (SSE, AVX), но на более крупном масштабе: сотни/тысячи одновременных вычислений
+\pause
+\item Для производительности вычислительные ядра организованы в группы (warps/wavefronts/SM) по 32/64 элемента
+\pause
+\item Все ядра одного wavefront'а выполняют одну и ту же операцию (но над разными данными)
+\pause
+\item Если мы рисуем только один треугольник, под него всё равно выделяется целый wavefront и большинство его ядер делают бесполезную работу
+\pause
+\item Максимизация загрузки wavefront'ов -- важная часть низкоуровневой оптимизации GPU
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Асинхронность GPU}
+\begin{itemize}
+\item Старые графические API (напр. OpenGL) прятали это в реализацию драйвера
+\pause
+\item Современные API (напр. WebGPU) явно отражают это в своём интерфейсе
+\pause
+\item {\color{red}\texttt{-}} Нет операции ``нарисовать объект''
+\item {\color{green}\texttt{+}} Есть операция ``записать последовательность команд и отправить в очередь на исполнение''
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Queue, command encoder, command buffer}
+\begin{itemize}
+\item \mintinline{rust}|CommandEncoder| -- объект, позволяющий записать набор команд для исполнения на GPU
+\pause
+\item \mintinline{rust}|encoder.finish() -> CommandBuffer| -- записанный буфер с командами в понятном драйверу/GPU виде
+\pause
+\item \mintinline{rust}|queue.submit(buffers)| -- отправить команды на исполнение (принимает массив \mintinline{rust}|CommandBuffer|'ов)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растеризация}
+\begin{itemize}
+\item Растеризация -- превращение геометрического примитива (точки, линии, треугольника, прямоугольника, круга, и т.д.) в набор соответствующих ему пикселей на экране/изображении
+\pause
+\item Превращение векторных данных в растровые
+\pause
+\item За нас её делает GPU!
+\pause
+\item Некоторые современные графические движки (Unreal 5 Nanite) делают растеризацию сами с помощью compute шейдеров
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Почему растеризация?}
+\begin{itemize}
+\item Исторически было очень много разных способов рисовать трёхмерные сцены; см. \href{https://dl.acm.org/doi/pdf/10.1145/356625.356626}{\texttt{Sutherland et al - A Characterization of Ten Hidden-Surface Algorithms}}
+\pause
+\item В современности есть два основных алгоритма:
+\pause
+\begin{itemize}
+\item \textbf{Растеризация}: какие пиксели занимает конкретный объект
+\pause
+\item \textbf{Трассировка лучей}: какие объекты видит конкретный пиксель
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Почему растеризация?}
+\begin{itemize}
+\item Особенности растеризации:
+\begin{itemize}
+\item {\color{green}\texttt{+}} Быстрее (зависит от сцены)
+\pause
+\item {\color{green}\texttt{+}} Легче параллелится
+\pause
+\item {\color{green}\texttt{+}} Лучше ложится на железо
+\pause
+\item {\color{green}\texttt{+}} Лучше работает с памятью (data locality)
+\pause
+\item {\color{red}\texttt{-}} Сложнее добиться фотореалистичной графики
+\end{itemize}
+\pause
+\item Особенности трассировки лучей:
+\pause
+\begin{itemize}
+\item Всё ровно наоборот :)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Растеризация: точка}
+\begin{itemize}
+\item Как растеризовать точку \begin{math}(x, y)\end{math}?
+\pause
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+set_pixel(floor(x), floor(y), color);
+\end{tcblisting}
+\pause
+\usemintedstyle{tango}
+\item В WebGPU: \mintinline{cpp}|point-list|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растеризация: точка}
+\slideimage{raster-point.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Растеризация: линия}
+\begin{itemize}
+\item Как растеризовать линию \begin{math}(x_1, y_1) \dots (x_2, y_2)\end{math}?
+\pause
+\item Алгоритм Брезенхэма
+\pause
+\item Есть вариация алгоритма для рисования окружностей
+\pause
+\usemintedstyle{tango}
+\item В WebGPU: \mintinline{cpp}|line-list|, \mintinline{cpp}|line-strip|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растеризация: линия}
+\slideimage{raster-line.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растеризация: окружность}
+\slideimage{raster-circle.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Растеризация: прямоугольник}
+\begin{itemize}
+\item Как растеризовать прямоугольник \begin{math}[x_1\dots x_2]\times[y_1\dots y_2]\end{math}?
+\end{itemize}
+\pause
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+for (int x = round(x_1); x < round(x_2); ++x) {
+    for (int y = round(y_1); y < round(y_2); ++y) {
+        set_pixel(x, y, color);
+    }
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растеризация: прямоугольник}
+\slideimage{raster-rect.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Растеризация: треугольник}
+\begin{itemize}
+\item Как растеризовать треугольник с вершинами \begin{math}(x_1, y_1), (x_2, y_2), (x_3, y_3)\end{math}?
+\pause
+\item Растеризуем ограничивающий прямоугольник, проверяя пиксели на вхождение в треугольник
+\pause
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+int xmin = min(floor(x_1), floor(x_2), floor(x_3));
+int xmax = max( ceil(x_1),  ceil(x_2),  ceil(x_3));
+
+int ymin = min(floor(y_1), floor(y_2), floor(y_3));
+int ymax = max( ceil(y_1),  ceil(y_2),  ceil(y_3));
+
+for (int x = xmin; x <= xmax; ++x) {
+    for (int y = ymin; y <= ymax; ++y) {
+        if (inside_triangle(x, y, ...)) {
+            set_pixel(x, y, color);
+        }
+    }
+}
+\end{tcblisting}
+\pause
+\usemintedstyle{tango}
+\item В WebGPU: \mintinline{cpp}|triangle-list|, \mintinline{cpp}|triangle-strip|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растеризация: треугольник}
+\slideimage{raster-triangle.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Растеризация: круг}
+\begin{itemize}
+\item Как растеризовать круг с центром \begin{math}(x_0, y_0)\end{math} и радиусом \begin{math}R\end{math}?
+\pause
+\item Растеризуем ограничивающий прямоугольник, проверяя пиксели на вхождение в круг
+\end{itemize}
+\pause
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+int xmin = floor(x_0 - R);
+int xmax =  ceil(x_0 + R);
+
+int ymin = floor(y_0 - R);
+int ymax =  ceil(y_0 + R);
+
+for (int x = xmin; x <= xmax; ++x) {
+    for (int y = ymin; y <= ymax; ++y) {
+        if (sqr(x - x_0) + sqr(y - y_0) <= sqr(R))
+            set_pixel(x, y, color);
+    }
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}
+\frametitle{Растеризация: круг}
+\slideimage{raster-disk.png}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=rasterization]
+\frametitle{Правила растеризации}
+\begin{itemize}
+\item Пиксель растеризуется, если \textit{центр пикселя} содержится в треугольнике
+\pause
+\item Если у двух треугольников есть общее ребро (и они не пересекаются внутренностями), то
+\begin{itemize}
+\item Каждый пиксель будет принадлежать ровно одному треугольнику, т.е. не будет наложения
+\item Ни один пиксель общего ребра не будет пропущен, т.е. не будет ``дырок''
+\end{itemize}
+\pause
+\item Подробнее: \href{https://en.wikibooks.org/wiki/GLSL_Programming/Rasterization}{\nolinkurl{en.wikibooks.org/wiki/GLSL\_Programming/Rasterization}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Правила растеризации}
+\slideimage{pixel-covered.png}
+\end{frame}
+
+\againframe<1-2>{rasterization}
+
+\begin{frame}
+\frametitle{Правила растеризации}
+\:
+\slideimage{triangle-rasterization.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Правила растеризации}
+Не будет наложения пикселей:
+\slideimage{triangle-rasterization-overlap.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Правила растеризации}
+Не будет дырок:
+\slideimage{triangle-rasterization-hole.png}
+\end{frame}
+
+\againframe<2-3>{rasterization}
+
+\begin{frame}[fragile]
+\frametitle{Правила растеризации}
+\begin{itemize}
+\item В современных графических API есть только три основных примитива для растеризации:
+\pause
+\begin{itemize}
+\item \textbf{Точки}: \mintinline{cpp}|point-list|
+\pause
+\item \textbf{Линии}: \mintinline{cpp}|line-list|, \mintinline{cpp}|list-strip|
+\pause
+\item \textbf{Треугольники}: \mintinline{cpp}|triangle-list|, \mintinline{cpp}|triangle-strip|
+\end{itemize}
+\pause
+\item Точки и линии обычно используются для дебажного рендеринга или вместе с геометрическими шейдерами, \textit{главный примитив -- \underline{треугольник}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{О треугольниках}
+\begin{itemize}
+\item Почему основным примитивом рисования стал \textit{треугольник}?
+\pause
+\item Для более сложных геометрических фигур (круг, многоугольник, и т.д.):
+\pause
+\begin{itemize}
+\item {\color{red}\texttt{-}} Сложнее алгоритм разтеризации (особенно с учётом перспективной проекции)
+\pause
+\item {\color{red}\texttt{-}} Сложнее задавать и интерполировать атрибуты (накладывать цвет и текстуру, вычислять освещение)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{О треугольниках}
+Плюсы треугольника:
+\pause
+\begin{itemize}
+\item {\color{green}\texttt{+}} Образ под действием перспективной проекции -- тоже треугольник
+\pause
+\item {\color{green}\texttt{+}} Есть единственный разумный способ интерполяции (линейная, с барицентрическими координатами)
+\pause
+\item {\color{green}\texttt{+}} Позволяет рисовать спрайты (прямоугольник -- два треугольника)
+\pause
+\item {\color{green}\texttt{+}} Позволяет рисовать многоугольники (посредством триангуляции)
+\pause
+\item {\color{green}\texttt{+}} Позволяет рисовать линии (превращая их в тонкие многоугольники)
+\pause
+\item {\color{green}\texttt{+}} Позволяет рисовать более сложные фигуры (аппроксимируя)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Графический конвейер (graphics pipeline)}
+\begin{itemize}
+\item Последовательность операций на GPU, превращающих входные данные в картинку на экране
+\pause
+\item Что происходит при выполнении \mintinline{cpp}|render_pass.draw()| от чтения данных до появления картинки на экране
+\pause
+\item Почти не отличается для разных графических API
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Графический конвейер (graphics pipeline)}
+Основные части конвейера:
+\begin{itemize}
+\item Входной поток вершин (vertex stream)
+\pause
+\begin{itemize}
+\item Позже мы узнаем, как его задавать
+\end{itemize}
+\pause
+\item Вершинный шейдер: обрабатывает вершины по одной
+\pause
+\item Сборка примитивов (primitive assembly) из отдельных вершин
+\pause
+\item Преобразование в оконную систему координат (viewport transform)
+\pause
+\item Растеризация примитивов
+\pause
+\item Пиксельный (фрагментный) шейдер: обрабатывает пиксели по одному
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Графический конвейер (graphics pipeline)}
+\begin{itemize}
+\item Мы пропустили много важных частей конвейера
+\item Будем их по чуть-чуть добавлять в течение курса
+\item \href{https://www.khronos.org/opengl/wiki/Rendering_Pipeline_Overview}{\nolinkurl{khronos.org/opengl/wiki/Rendering_Pipeline_Overview}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Графический конвейер (graphics pipeline)}
+\begin{itemize}
+\item Конвейер -- удобная абстракция, внутри GPU всё устроено сложнее
+\pause
+\item Каждая часть конвейера выполняется сразу на большом объёме входных данных параллельно
+\pause
+\item Разные части конвейера могут выполняться одновременно (на разных данных)
+\pause
+\item Разные вызовы команд рисования могут обрабатываться параллельно
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Вершинный (vertex) шейдер}
+\begin{itemize}
+\pause
+\item Входные данные:
+\pause
+\begin{itemize}
+\item Аттрибуты вершин (мы позже узнаем, как их задавать) -- свои значения для каждой вершины (позиция, цвет, нормаль)
+\pause
+\item Immediates/push constants -- маленький (128 байт) набор данных, вшитый в command buffer
+\pause
+\item Встроенные переменные, например \mintinline{wgsl}|@builtin(vertex_index)| -- полный список смотри в \href{https://gpuweb.github.io/gpuweb/wgsl/#builtin-inputs-outputs}{\nolinkurl{документации}}
+\pause
+\item Uniform'ы, текстуры, буферы -- об этом позже :)
+\end{itemize}
+\pause
+\item Выходные данные:
+\begin{itemize}
+\item \mintinline{wgsl}|@builtin(position) position: vec4f|
+\pause
+\item Переменные, интерполированное значение которых попадёт во фрагментный (пиксельный) шейдер: \mintinline{wgsl}|@location(0) color: vec4f|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1>[label=primitive_assembly]
+\frametitle{Сборка примитивов (primitive assembly)}
+\begin{itemize}
+\item Превращает набор независимых вершин в \textit{притимивы} растеризации: точки/линии/треугольники
+\pause
+\item Правила сборки зависят от выбранного типа примитива: \mintinline{cpp}|point-list|, \mintinline{cpp}|line-list|, \mintinline{cpp}|line-strip|, \mintinline{cpp}|triangle-list|, \mintinline{cpp}|triangle-strip|
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Сборка примитивов (primitive assembly)}
+\slideimage{primitives.png}
+\end{frame}
+
+\againframe<1->{primitive_assembly}
+
+\begin{frame}[fragile]
+\frametitle{Viewport transform}
+\begin{itemize}
+\item Преобразование в оконную (пиксельную) систему координат
+\item \begin{math}X: [-1, 1] \rightarrow [X_{min}, X_{max}]\end{math}
+\item \begin{math}Y: [-1, 1] \rightarrow [Y_{max}, Y_{min}]\end{math} (-1 внизу, 1 вверху)
+\pause
+\item Настроить: \mintinline{cpp}|render_pass.set_viewport()|
+\pause
+\item По умолчанию -- весь экран (точнее, весь color target)
+\pause
+\item Вне прямоугольника \begin{math}[X_{min}, X_{max}]\times[Y_{min}, Y_{max}]\end{math} \textit{ничего не нарисуется}: GPU обрежет все примитивы по этим границам
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Фрагментный (пиксельный, fragment) шейдер}
+\begin{itemize}
+\pause
+\item Входные данные:
+\pause
+\begin{itemize}
+\item Проинтерполированные значения из вершинного шейдера: \mintinline{wgsl}|@location(0) color: vec4f|
+\pause
+\item Immediates/push constants
+\pause
+\item Встроенные переменные, например \mintinline{wgsl}|@builtin(position)|
+\pause
+\item Uniform'ы, текстуры, буферы
+\end{itemize}
+\pause
+\item Выходные данные:
+\begin{itemize}
+\item \mintinline{wgsl}|@location(0) color: vec4f| -- выходной цвет в формате RGBA, компоненты в диапазоне \([0\dots 1]\)
+\pause
+\item Может быть несколько, об этом поговорим позже
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Render pass encoder}
+\begin{itemize}
+\item При рисовании нам нужно сказать, \textbf{куда} рисовать, \textbf{что} рисовать, и \textbf{как} рисовать
+\pause
+\item Куда (в какую текстуру) рисовать настраивается при создании \mintinline{rust}|RenderPassEncoder|'а
+\pause
+\item Что рисовать настраивается через методы \mintinline{rust}|RenderPassEncoder|'а (\mintinline{rust}|set_vertex_buffer| и т.п.)
+\pause
+\item Как рисовать настраивается через \mintinline{rust}|render_pass_encoder.set_pipeline()|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Render pipeline}
+\begin{itemize}
+\item Часть настроек конвейера -- тяжёлые и сложные, с большим объёмом валидации: настройки атрибутов вершин, используемые шейдеры, тип примитива, и т.п.
+\pause
+\item Часть настроек -- лёгкие, часто описываются парой чисел: viewport, scissor, blend constant, stencil reference
+\pause
+\item Тяжёлые настройки хранит особый объект -- \mintinline{rust}|RenderPipeline|
+\pause
+\item Лёгкие настройки можно менять на лету через \mintinline{rust}|RenderPassEncoder|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Языки описания шейдеров}
+\begin{itemize}
+\item \textbf{OpenGL, Vulkan}: \textbf{GLSL} (GL Shading Language)
+\pause
+\item \textbf{DirectX}: \textbf{HLSL} (High-Level Shading Language)
+\pause
+\item \textbf{DirectX} (до 2012): \textbf{Cg} (C for Graphics), deprecated
+\pause
+\item \textbf{WebGPU}: \textbf{\alert{\underline{WGSL}}} (WebGpu Shading Language)
+\pause
+\item \textbf{Slang} -- язык, не привязанный к API
+\pause
+\item И другие: \href{https://en.wikipedia.org/wiki/Shading_language}{\nolinkurl{en.wikipedia.org/wiki/Shading\_language}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Язык описания шейдеров WGSL}
+\begin{itemize}
+\item Похож на Rust
+\pause
+\item Типы данных:
+\pause
+\begin{itemize}
+\item Скалярные: \mintinline{wgsl}|bool|, \mintinline{wgsl}|i32|, \mintinline{wgsl}|u32|, \mintinline{wgsl}|f32|
+\pause
+\item Векторные: \mintinline{wgsl}|vec2<T>|, \mintinline{wgsl}|vec3<T>|, \mintinline{wgsl}|vec4<T>|
+\pause
+\item Векторные алиасы: \mintinline{wgsl}|vec2i|, \mintinline{wgsl}|vec3f|, ...
+\pause
+\item Матричные: \mintinline{wgsl}|mat2x4<T>|, \mintinline{wgsl}|mat4x4f|, ...
+\pause
+\item \textbf{N.B.:} \mintinline{wgsl}|mat2x4| это матрица \(4\times 2\), т.е. с 4 строками и 2 столбцами!
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Язык описания шейдеров WGSL}
+\begin{itemize}
+\item Конструкторы векторов:
+\pause
+\begin{itemize}
+\item \mintinline{wgsl}|vec3f(x, y, z)|
+\pause
+\item \mintinline{wgsl}|vec3f(x) == vec3f(x, x, x)|
+\pause
+\item \mintinline{wgsl}|vec3f(vec2f(x, y), z) == vec3f(x, vec2f(y, z))|
+\end{itemize}
+\pause
+\item Подробнее: \href{hhttps://google.github.io/tour-of-wgsl/types}{\nolinkurl{google.github.io/tour-of-wgsl/types}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Язык описания шейдеров WGSL}
+\begin{itemize}
+\item Есть стандартные операции: \mintinline{wgsl}|+|, \mintinline{wgsl}|-|, \mintinline{wgsl}|*|, \mintinline{wgsl}|/|, \mintinline{wgsl}|%|, \mintinline{wgsl}|<|, \mintinline{wgsl}|==|, ...
+\pause
+\begin{itemize}
+\item Для векторов и матриц применяются покомпонентно
+\pause
+\item Исключение: умножение двух матриц это умножение в смысле алгебры
+\pause
+\item Исключение: умножение матрицы на вектор слева это умножение в смысле алгебры
+\pause
+\item Исключение: умножение матрицы на вектор справа это умножение в смысле алгебры на транспонированную матрицу
+\end{itemize}
+\pause
+\item Доступ к координатам векторов: \mintinline{wgsl}|a.x = b.y|
+\pause
+\item Swizzling: \mintinline{wgsl}|a.xxzy == vec4f(a.x, a.x, a.z, a.y)|
+\pause
+\item Доступ к элементам матриц: \mintinline{wgsl}|m[column][row]|
+\pause
+\item Есть полезные математические функции: \mintinline{wgsl}|pow|, \mintinline{wgsl}|sin|, \mintinline{wgsl}|cos|, ...
+\pause
+\begin{itemize}
+\item Для векторов и матриц применяются покомпонентно
+\end{itemize}
+\pause
+\item Есть математические функции векторной алгебры: \mintinline{wgsl}|dot|, \mintinline{wgsl}|cross|, \mintinline{wgsl}|length|, \mintinline{wgsl}|normalize|, ...
+\pause
+\item Линейная и нелинейная интерполяция: \mintinline{wgsl}|mix|, \mintinline{wgsl}|smoothstep|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Язык описания шейдеров WGSL}
+\begin{itemize}
+\item Есть массивы: \mintinline{wgsl}|let a = array<f32, 5>(0.0, 1.0, 2.0, 3.0, 4.0);|
+\pause
+\item Константы (известные на момент компиляции): \mintinline{wgsl}|const float PI = 3.141592;|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Язык описания шейдеров WGSL}
+\begin{itemize}
+\item Ветвление: \mintinline{wgsl}|if (condition) { ... } else { ... }|
+\pause
+\item Тернарный if: \mintinline{wgsl}|select(if_false, if_true, condition);|
+\pause
+\item Циклы: \mintinline{wgsl}|for (var i = 0; i < 10; ++i) { ... }|
+\begin{itemize}
+\item Бесконечные циклы могут проявиться по-разному, вплоть до креша всей системы :)
+\end{itemize}
+\pause
+\usemintedstyle{lightbulb}
+\item Функции:
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+fn diffuse(n: vec3f, l: vec3f) -> f32 {
+    return max(0.0, dot(n, l));
+}
+\end{tcblisting}
+\pause
+\begin{itemize}
+\item Могут вызывать другие функции
+\pause
+\item Рекурсия \textbf{запрещена}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Язык описания шейдеров WGSL}
+\begin{itemize}
+\item Про условные конструкции в шейдерах ходит очень много мифов, вот TL;DR:
+\pause
+\item Старые GPU действительно плохо умели их обрабатывать из-за \textit{wave divergence}: разным ядрам одного wavefront'а приходится выполнять разные операции
+\pause
+\item Современные GPU хорошо обрабатывают условия, если их результат одинаковый в рамках одного \textit{wavefront'а} (близкие по номеру вершины, близкие на экране пиксели)
+\pause
+\item Например, когда условие зависит только от uniform или immediate переменных (т.н. \textit{uniform control flow}), его результат один для всех вызовов шейдера (в рамках одной команды рисования)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Полезные ресурсы о шейдерах}
+\begin{itemize}
+\item Туториал: \href{https://google.github.io/tour-of-wgsl}{\nolinkurl{google.github.io/tour-of-wgsl}}
+\item Туториал: \href{https://webgpufundamentals.org/webgpu/lessons/webgpu-wgsl.html}{\nolinkurl{webgpufundamentals.org/webgpu/lessons/webgpu-wgsl.html}}
+\item Книжка-учебник с большим количеством примеров сложных шейдеров: \href{https://thebookofshaders.com/00/}{\texttt{The Book of Shaders}}
+\item Онлайн-редактор шейдеров: \href{https://shadertoy.com}{\nolinkurl{shadertoy.com}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Четырёхмерные векторы?}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item WGSL поддерживает операции с матрицами и векторами размерностей вплоть до 4
+\item \mintinline{wgsl}|@builtin(position)| имеет 4 компоненты
+\pause
+\item Мы хотим рисовать двухмерные и трёхмерные объекты, зачем четвёртая координата?
+\pause
+\item Три причины:
+\pause
+\begin{itemize}
+\item Для некоторых \textit{типов данных}: кватернионы, цвета (rgba)
+\pause
+\item Для \textit{перспективной проекции} (4ая лекция)
+\pause
+\item Для \textit{аффинных преобразований}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинное пространство}
+\begin{itemize}
+\item Векторные (линейные) пространства -- круто: большая теория, эффективные операции
+\pause
+\item Не очень подходит для того, чтобы моделировать пространство
+\pause
+\begin{itemize}
+\item Где в пространстве точка, соответствующая нулевому вектору?
+\pause
+\item Что такое сумма двух точек?
+\end{itemize}
+\pause
+\item Мысль: точки \begin{math}\neq\end{math} векторы
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинное пространство}
+\begin{itemize}
+\item Аффинное пространство: векторное пространство, в котором ``забыли''  нулевой вектор
+\pause
+\item Формальнее, аффинное пространство \begin{math}\mathbb A\end{math} над векторным пространством \begin{math}\mathbb V\end{math} -- это:
+\pause
+\begin{itemize}
+\item Множество точек \begin{math}\mathbb A\end{math}
+\pause
+\item Операция ``точка + вектор'': \begin{math}\oplus: \mathbb A \times \mathbb V \rightarrow \mathbb A\end{math}
+\pause
+\item Операция ``точка - точка'': \begin{math}\ominus: \mathbb A \times \mathbb A \rightarrow \mathbb V\end{math}
+\pause
+\item Аксиомы, связывающие их с операциями векторного пространства, например
+\begin{math}(p\oplus v_1)\oplus v_2 = p\oplus(v_1+v_2)\end{math}
+\end{itemize}
+\pause
+\item Любую точку \begin{math}p_0\in \mathbb A\end{math} можно принять за начало координат
+\item Это даёт биекцию \begin{math}\mathbb A \rightarrow \mathbb V\end{math} по формуле \begin{math}p \mapsto p - p_0\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинное пространство}
+\begin{itemize}
+\item Множество решений уравнения \begin{math}Lx=0\end{math} в векторном пространстве -- \textit{векторное подпространство} \begin{math}\ker L\end{math}
+\pause
+\item Множество решений уравнения \begin{math}Lx=y\end{math} в векторном пространстве -- \alert{\textbf{не}} векторное подпространство
+\pause
+\item Множество решений уравнения \begin{math}Lx=y\end{math} в векторном пространстве -- \textit{аффинное пространство} над \begin{math}\ker L\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные комбинации}
+\begin{itemize}
+\item Пусть есть набор точек \begin{math}p_1, \dots, p_N\end{math} и набор коэффициентов \begin{math}\lambda_1, \dots, \lambda_N\end{math}
+\pause
+\item Выберем начало координат \begin{math}p_0\end{math} и определим
+
+\begin{math}\sum \lambda_i p_i = p_0 + \sum \lambda_i (p_i - p_0) \in \mathbb A\end{math}
+\pause
+\item Теорема: если \begin{math}\sum \lambda_i = 1\end{math}, то результат (точка) не зависит от выбора \begin{math}p_0\end{math}
+\pause
+\item В этом случае \begin{math}q = \sum \lambda_i p_i\end{math} называется \textit{аффинной комбинацией} точек \begin{math}p_i\end{math} с коэффициентами \begin{math}\lambda_i\end{math}
+\pause
+\item Коэффициенты \begin{math}\lambda_i\end{math} называются \textit{барицентрическими координатами} точки \begin{math}q\end{math}
+\pause
+\item Поиск \begin{math}\lambda_i\end{math} по известным \begin{math}q\end{math} и \begin{math}p_i\end{math} сводится к решению линейной системы уравнений (квадратная только если \begin{math}N = D + 1\end{math}, где \begin{math}D\end{math} -- размерность пространства)
+\pause
+\item Аффинная комбинация пустого множества точек не определена
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные комбинации: пример}
+\slideimage{lerp-base.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные комбинации: пример}
+\slideimage{lerp-1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные комбинации: пример}
+\slideimage{lerp-2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные комбинации: пример}
+\slideimage{lerp-3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные комбинации: пример}
+\slideimage{lerp-4.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Векторнозначные комбинации}
+\begin{itemize}
+\item Пусть есть набор точек \begin{math}p_1, \dots, p_N\end{math} и набор коэффициентов \begin{math}\lambda_1, \dots, \lambda_N\end{math}
+\pause
+\item Выберем начало координат \begin{math}p_0\end{math} и определим
+
+\begin{math}\sum \lambda_i p_i = \sum \lambda_i (p_i - p_0) \in \mathbb V\end{math}
+\pause
+\item Теорема: если \begin{math}\sum \lambda_i = 0\end{math}, то результат (вектор) не зависит от выбора \begin{math}p_0\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинная оболочка}
+\begin{itemize}
+\item Пусть есть набор точек \begin{math}p_1, \dots, p_N\end{math}
+\pause
+\item Их \textit{аффинная оболочка} -- множество всех возможных аффинных комбинаций, т.е. множество \begin{math}\sum \lambda_i p_i\end{math} для всех возможных \begin{math}\lambda_i\end{math} таких, что \begin{math}\sum \lambda_i = 1\end{math}
+\pause
+\item Аффинная оболочка точки -- сама \textit{точка}
+\pause
+\item Аффинная оболочка двух точек -- содержащая их \textit{прямая}
+\pause
+\item Аффинная оболочка трёх точек -- содержащая их \textit{плоскость}
+\pause
+\item И т.д.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Линейная интерполяция}
+\begin{itemize}
+\item Линейная интерполяция = интерполяция, использующая барицентрические координаты как коэффициенты
+\pause
+\item Пусть есть точки \begin{math}p_i\end{math} и точка \begin{math}q = \sum \lambda_i p_i\end{math}
+\pause
+\item Пусть в точках \begin{math}p_i\end{math} задано значение некоторой величины \begin{math}f_i\end{math}
+\pause
+\item Линейная интерполяция величины \begin{math}f\end{math} в точке \begin{math}q\end{math} -- значение \begin{math}\sum \lambda_i f_i\end{math}
+\pause
+\item Для этого нужно вычисляить \begin{math}\lambda_i\end{math} по известным \begin{math}p_i\end{math} и \begin{math}q\end{math}, что сводится к системе линейных уравнений
+\pause
+\item \textbf{Ровно это} происходит при интерполяции значений, переданных из вершинного шейдера во фрагментный \pause (с точностью до перспективной проекции, о чём мы поговорим позже)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Линейная интерполяция цветов}
+\slideimage{triangle.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Выпуклые оболочки}
+\begin{itemize}
+\item Выпуклая комбинация: аффинная комбинация, в которой все коэффициенты неотрицательны \begin{math}\lambda_i \geq 0\end{math}
+\pause
+\begin{itemize}
+\item Вместе с \begin{math}\sum\lambda_i = 1\end{math} это означает, что \begin{math}\lambda_i \in [0, 1]\end{math}
+\end{itemize}
+\pause
+\item Множество всех выпуклых комбинаций набора точек = \textit{выпуклая оболочка}
+\pause
+\item Выпуклая оболочка точки -- сама \textit{точка}
+\pause
+\item Выпуклая оболочка двух точек -- \textit{отрезок} между этими точками
+\pause
+\item Выпуклая оболочка трёх точек -- \textit{треугольник} с этими точками в качестве вершин
+\pause
+\item Выпуклая оболочка четырёх точек -- \textit{тетраэдр} с этими точками в качестве вершин
+\pause
+\item И т.д.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Выпуклые оболочки}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item При растеризации центры пикселей попадают внутрь треугольника
+\pause
+\item \begin{math}\Rightarrow\end{math} Пиксели лежат в \textit{выпуклой оболочке} исходных вершин
+\pause
+\item \begin{math}\Rightarrow\end{math} Коэффициенты интерполяции всегда в диапазоне \begin{math}\lambda_i \in [0, 1]\end{math}
+\pause
+\item \begin{math}\Rightarrow\end{math} Проинтерполированные значения лежат в выпуклой оболочке значений в вершинах
+\begin{itemize}
+\item Например, если \mintinline{cpp}|out|-значения величины в вершинах были \begin{math}1.5\end{math}, \begin{math}0.3\end{math} и \begin{math}5.7\end{math}, то \mintinline{cpp}|in|-значения в пикселях будут в диапазоне \begin{math}[0.3, 5.7]\end{math} \textit{(с точностью до floating-point ошибок)}
+\end{itemize}
+\pause
+\item N.B. Это может нарушаться при \textit{мультисэмплинге}, о котором мы поговорим позднее
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные преобразования}
+\begin{itemize}
+\item Линейные преобразования -- сохраняют \textit{линейные комбинации} векторов: \begin{math}S \left(\sum \lambda_i v_i\right) = \sum \lambda_i S v_i\end{math}
+\pause
+\item Аффинные преобразования -- сохраняют \textit{аффинные комбинации} точек: \begin{math}S \left(\sum \lambda_i p_i\right) = \sum \lambda_i S p_i\end{math}
+\pause
+\item Если выбрано начало координат \begin{math}p_0\end{math}, преобразование \begin{math}S: \mathbb A \rightarrow \mathbb A\end{math} можно понимать как преобразование соответствующего векторного пространства
+\begin{math}S: \mathbb V \rightarrow \mathbb V\end{math} по формуле \begin{math}S(v) = S(p_0 + v) - p_0\end{math}
+\pause
+\item Можно показать, что в таком виде любое аффинное преобразование это линейное преобразование + сдвиг на фиксированный вектор:
+
+\begin{math}S(v) = Av + b\end{math}
+где
+\begin{itemize}
+\item \begin{math}A\end{math} -- линейное преобразование пространства \begin{math}\mathbb V\end{math}
+\item \begin{math}b\end{math} -- вектор из пространства \begin{math}\mathbb V\end{math}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные преобразования}
+\begin{itemize}
+\item В коде аффинное преобразование пространства размерности \begin{math}N\end{math} можно представлять как \textit{пару} \begin{math}(A,b)\end{math} из матрицы \begin{math}N\times N\end{math} и вектора размерности \begin{math}N\end{math}
+\pause
+\item Пара \begin{math}(A,b)\end{math} действует на точку/вектор \begin{math}v\end{math} по формуле
+
+\begin{math}(A, b) \cdot v = Av + b\end{math}
+\pause
+\item Композиция преобразований:
+
+\begin{math}(A_1, b_1) \cdot (A_2, b_2) \cdot v = (A_1, b_1) \cdot (A_2 v + b_2) = A_1 (A_2 v + b_2) + b_1 = (A_1 A_2) v + (A_1 b_2 + b_1) = (A_1 A_2, A_1 b_2 + b_1) \cdot v\end{math}
+\pause
+\item Тождественное преобразование:
+\begin{math}(\mathbb I, 0)\end{math}
+\pause
+\item Обратное преобразование:
+
+\begin{math}(A, b)^{-1} = (A^{-1}, -A^{-1}b)\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинные преобразования}
+\begin{itemize}
+\item Повсеместно используются для задания положения, ориентации и размера объектов
+\pause
+\item Векторная часть преобразования: положение 3D-объекта
+\pause
+\item Матричная часть преобразования: вращение и размер объекта
+\pause
+\item При чём тут четвёртая координата?
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Однородные координаты}
+\begin{itemize}
+\item Трюк: можно вложить \textit{вектор} размерности \begin{math}N\end{math} в векторное пространство размерности \begin{math}N+1\end{math}, добавив \begin{math}0\end{math} в качестве последней координаты
+\pause
+\item Трюк: можно вложить \textit{точку} размерности \begin{math}N\end{math} в векторное пространство размерности \begin{math}N+1\end{math}, добавив \begin{math}1\end{math} в качестве последней координаты
+\pause
+\item Такое представление точек и векторов называется \textit{однородными координатами}
+\pause
+\item Согласуется с операциями на векторах и точках
+\pause
+\item Согласуется с аффинными комбинациями
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Однородные координаты}
+\begin{itemize}
+\item Позволяет представить аффинное преобразование \begin{math}N\end{math}-мерного пространства как матрицу \begin{math}(N+1)\times (N+1)\end{math}:
+
+\begin{center}
+\begin{math}
+\begin{pmatrix}
+A & b \\
+0 & 1
+\end{pmatrix}
+\end{math}
+\end{center}
+\pause
+\item Можно применять как к точкам, так и к векторам (векторы игнорируют сдвиг на \begin{math}b\end{math})
+\pause
+\item Композиция преобразований = умножение матриц
+\pause
+\item \begin{math}\Rightarrow\end{math} Позволяет удобно комбинировать преобразования (напр. масштабирование + сдвиг + поворот + другой сдвиг)
+\pause
+\item \begin{math}\Rightarrow\end{math} Позволяет собрать положение и ориентацию камеры и её проекцию в одну матрицу (обсудим на 4ой лекции)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Точка в однородных координатах}
+\begin{center}
+\begin{math}
+\begin{pmatrix}
+p_1 \\
+p_2 \\
+p_3 \\
+1
+\end{pmatrix}
+\end{math}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Вектор в однородных координатах}
+\begin{center}
+\begin{math}
+\begin{pmatrix}
+v_1 \\
+v_2 \\
+v_3 \\
+0
+\end{pmatrix}
+\end{math}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аффинное преобразование в однородных координатах}
+\begin{center}
+\begin{math}
+\begin{pmatrix}
+A_{1,1} & A_{1,2} & A_{1,3} & b_1 \\
+A_{2,1} & A_{2,2} & A_{2,3} & b_2 \\
+A_{3,1} & A_{3,2} & A_{3,3} & b_3 \\
+0 & 0 & 0 & 1
+\end{pmatrix}
+\end{math}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Матрица сдвига на фиксированный вектор}
+\begin{center}
+\begin{math}
+\begin{pmatrix}
+1 & 0 & 0 & t_x \\
+0 & 1 & 0 & t_y \\
+0 & 0 & 1 & t_z \\
+0 & 0 & 0 & 1
+\end{pmatrix}
+\cdot
+\begin{pmatrix}
+p_x \\
+p_y \\
+p_z \\
+1
+\end{pmatrix}
+=
+\begin{pmatrix}
+p_x + t_x \\
+p_y + t_y\\
+p_z + t_z\\
+1
+\end{pmatrix}
+\end{math}
+
+\begin{math}
+\begin{pmatrix}
+1 & 0 & 0 & t_x \\
+0 & 1 & 0 & t_y \\
+0 & 0 & 1 & t_z \\
+0 & 0 & 0 & 1
+\end{pmatrix}
+\cdot
+\begin{pmatrix}
+v_x \\
+v_y \\
+v_z \\
+0
+\end{pmatrix}
+=
+\begin{pmatrix}
+v_x\\
+v_y\\
+v_z\\
+0
+\end{pmatrix}
+\end{math}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Матрица изотропного масштабирования}
+\begin{center}
+\begin{math}
+\begin{pmatrix}
+s & 0 & 0 & 0 \\
+0 & s & 0 & 0 \\
+0 & 0 & s & 0 \\
+0 & 0 & 0 & 1
+\end{pmatrix}
+\cdot
+\begin{pmatrix}
+p_x \\
+p_y \\
+p_z \\
+1
+\end{pmatrix}
+=
+\begin{pmatrix}
+s p_x\\
+s p_y\\
+s p_z\\
+1
+\end{pmatrix}
+\end{math}
+
+\begin{math}
+\begin{pmatrix}
+s & 0 & 0 & 0 \\
+0 & s & 0 & 0 \\
+0 & 0 & s & 0 \\
+0 & 0 & 0 & 1
+\end{pmatrix}
+\cdot
+\begin{pmatrix}
+v_x \\
+v_y \\
+v_z \\
+0
+\end{pmatrix}
+=
+\begin{pmatrix}
+s v_x\\
+s v_y\\
+s v_z\\
+0
+\end{pmatrix}
+\end{math}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Матрица поворота на угол \begin{math}\theta\end{math} в плоскости XY}
+\begin{center}
+\begin{math}
+\begin{pmatrix}
+\cos \theta & - \sin \theta & 0 & 0 \\
+\sin \theta & \cos \theta & 0 & 0 \\
+0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1
+\end{pmatrix}
+\cdot
+\begin{pmatrix}
+p_x \\
+p_y \\
+p_z \\
+1
+\end{pmatrix}
+=
+\begin{pmatrix}
+p_x \cos \theta - p_y \sin \theta \\
+p_x \sin \theta + p_y \cos \theta \\
+p_z \\
+1
+\end{pmatrix}
+\end{math}
+
+\begin{math}
+\begin{pmatrix}
+\cos \theta & - \sin \theta & 0 & 0 \\
+\sin \theta & \cos \theta & 0 & 0 \\
+0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1
+\end{pmatrix}
+\cdot
+\begin{pmatrix}
+v_x \\
+v_y \\
+v_z \\
+0
+\end{pmatrix}
+=
+\begin{pmatrix}
+v_x \cos \theta - v_y \sin \theta \\
+v_x \sin \theta + v_y \cos \theta \\
+v_z \\
+0
+\end{pmatrix}
+\end{math}
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{Аффинные преобразования: ссылки}
+\begin{itemize}
+\item \href{https://learnopengl.com/Getting-started/Transformations}{\nolinkurl{learnopengl.com/Getting-started/Transformations}}
+\item \href{https://open.gl/transformations}{\nolinkurl{open.gl/transformations}}
+\item \href{https://en.wikipedia.org/wiki/Affine_space}{\nolinkurl{en.wikipedia.org/wiki/Affine\_space}}
+\item \href{https://en.wikipedia.org/wiki/Affine_transformation}{\nolinkurl{en.wikipedia.org/wiki/Affine\_transformation}}
+\end{itemize}
+\end{frame}
+
+\end{document}

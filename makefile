@@ -3,6 +3,7 @@ PDFLATEX=lualatex -shell-escape -interaction=nonstopmode -halt-on-error
 .ONESHELL:
 
 all: pdf/lecture01.pdf pdf/practice01.pdf
+all: pdf/lecture02.pdf
 
 pdf/%.pdf: source/%/source.tex source/%/images/*.png
 	mkdir -p build/$(@F)
