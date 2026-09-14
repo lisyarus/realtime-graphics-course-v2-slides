@@ -1,0 +1,182 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 2: Вращаем треугольник}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\usemintedstyle{tango}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{}
+\slideimage{task_0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Уменьшим треугольник в 2 раза, используя \textbf{immediate значение}
+\begin{itemize}
+\item В шейдере заводим \mintinline{wgsl}|var<immediate> scale: f32;| и домножаем где-то координаты на неё
+\item В коде инициализации, при создании \textbf{render pipeline} надо создать \textbf{pipeline layout}, выставить ему \mintinline{rust}|immediate_size = 4|, и передать его в descriptor при создании \textbf{render pipeline}
+\begin{itemize}
+\item C++: \mintinline{cpp}|WGPUPipelineLayoutDescriptor|, \mintinline{cpp}|wgpuDeviceCreatePipelineLayout|
+\item Rust: \mintinline{rust}|device.create_pipeline_layout()|
+\end{itemize}
+\item Перед вызовом рисования, передаём значение в \textbf{render pass} с \mintinline{rust}|offset = 0|
+\begin{itemize}
+\item C++: \mintinline{cpp}|wgpuRenderPassEncoderSetImmediates()|
+\item Rust: \mintinline{rust}|render_pass.set_immediates()|, \mintinline{rust}|bytemuck::bytes_of()|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+\slideimage{task_1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Добавим анимированное значение
+\begin{itemize}
+\item В шейдере нам нужны 2 immediate значения \(\Longrightarrow\) заводим под них структуру
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+struct Immediates {
+    scale: f32,
+    angle: f32,
+}
+var<immediate> immediates: Immediates;
+\end{tcblisting}
+\usemintedstyle{tango}
+\item Обращаемся к её полям как \mintinline{wgsl}|immediates.scale| и \mintinline{wgsl}|immediates.angle|
+\item Нужно повернуть вектор координат на переданный угол (формулы смотри в лекции; нам нужны только координаты XY)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Добавим анимированное значение
+\begin{itemize}
+\item В создании \textbf{pipeline layout} обновляем \mintinline{rust}|immediate_size = 8|
+\item В основном коде рисования заводим переменную \mintinline{cpp}|angle|, как-то зависящую от \mintinline{cpp}|time|
+\item Перед вызовом рисования, передаём её значение в \textbf{render pass} так же, как \mintinline{cpp}|scale|, но с \mintinline{rust}|offset = 4|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{task_2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Заменяем ручное преобразование на матрицу \(4\times 4\)
+\begin{itemize}
+\item В шейдере заменяем \mintinline{wgsl}|scale| и \mintinline{wgsl}|angle| на одно поле \mintinline{wgsl}|transform: mat4x4f| (саму структуру лучше оставить)
+\item Надо подумать, что надо домножить на эту матрицу и с какой стороны :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Заменяем ручное преобразование на матрицу \(4\times 4\)
+\begin{itemize}
+\item В создании \textbf{pipeline layout} обновляем \mintinline{rust}|immediate_size = 64|
+\item Перед вызовом рисования заводим массив из 16-ти float'ов и заполняем матрицей поворота + масштабирования
+\item Должен остаться один вызов \mintinline{rust}|set_immediates|, \mintinline{rust}|offset = 0|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Добавляем в матрицу сдвиг, зависящий от времени
+\begin{itemize}
+\item Перед вызовом рисования заводим переменные \mintinline{cpp}|x| и \mintinline{cpp}|y|, как-то зависящие от \mintinline{cpp}|time|
+\item Вставляем их в нужное место матрицы
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+\slideimage{task_4.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Исправляем ``сплюснутость'' треугольника: добавляем обработку aspect ratio экрана
+\begin{itemize}
+\item В структуру \mintinline{wgsl}|Immediates| в шейдере добавляем ещё одну матрицу \mintinline{wgsl}|view: mat4x4f|, она должна применяться \textit{после} матрицы \mintinline{wgsl}|transform|
+\item В создании \textbf{pipeline layout} обновляем \mintinline{rust}|immediate_size = 128| -- это максимум, поддерживаемый большинством платформ
+\item Перед вызовом рисования заводим ещё один массив из 16-ти float'ов и заполняем матрицей, которая делит координату X на \mintinline{cpp}|aspect_ratio|
+\item \mintinline{cpp}|aspect_ratio| вычисляется как \mintinline{cpp}|width / height| (важно, чтобы это было floating-point деление, а не целочисленное с округлением)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\slideimage{task_5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Заменяем треугольник на управляемый шестиугольник
+\begin{itemize}
+\item Нужно поменять количество вершин в \mintinline{rust}|render_pass.draw()|
+\item Нужно обновить захардкоженные массивы координат и цветов в шейдере
+\item Нужно сделать так, чтобы шестиугольник можно было двигать по обеим осям стрелками клавиатуры
+\begin{itemize}
+\item В коде уже есть hash set \mintinline{cpp}|keydown|/\mintinline{rust}|app.keydown|
+\item C++: \mintinline{cpp}|keydown.contains(SDLK_LEFT)|, ...
+\item Rust: \mintinline{rust}|app.keydown.contains(&KeyCode::ArrowLeft)|, ...
+\end{itemize}
+\item Сдвиг должен быть пропорционален \mintinline{cpp}|dt|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\slideimage{task_6.png}
+\end{frame}
+
+\end{document}
