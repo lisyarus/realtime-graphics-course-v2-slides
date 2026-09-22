@@ -1,0 +1,748 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{tikz}
+\usepackage{xifthen}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usetheme{metropolis}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{codebg}{RGB}{29,35,49}
+\setminted{fontsize=\footnotesize}
+
+\usemintedstyle{solarized-light}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Лекция 3: Буферы на GPU, аттрибуты вершин, индексированный рендеринг, instancing}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Вершины}
+\begin{itemize}
+\item Мы знаем, что \textit{вершинный шейдер} обрабатывает по одной \textit{вершины} нашей 3D (или 2D) модели
+\pause
+\item Пока мы умеем только хардкодить их \textit{атрибуты} (положение в пространстве, цвет) в шейдере
+\pause
+\item В модели могут быть тысячи или миллионы вершин, одним шейдером хочется рисовать разные модели
+\pause
+\item \(\Longrightarrow\) Хочется как-то загрузить их в память GPU
+\pause
+\item \(\Longrightarrow\) Хочется как-то рассказать шейдеру, где они лежат
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Буферы}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Могут хранить произвольные данные на GPU, сами никак их не интерпретируют
+\pause
+\item При создании нужно указать:
+\pause
+\begin{itemize}
+\item \mintinline{rust}|size| -- размер в байтах
+\pause
+\item \mintinline{rust}|usage| -- флаги, описывающие, как мы будем использовать этот буфер (нужны для валидации, выбора правильного вида памяти, и т.д.)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Buffer usage}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Возможные значения \mintinline{rust}|usage| (это битовые флаги -- их можно комбинировать):
+\pause
+\begin{itemize}
+\item \mintinline{rust}|MapRead|, \mintinline{rust}|MapWrite| -- можно замапить на чтение/запись (об этом позже)
+\pause
+\item \mintinline{rust}|CopySrc|, \mintinline{rust}|CopyDst| -- можно копировать данные из/в этот буффер
+\pause
+\item \mintinline{rust}|Index|, \mintinline{rust}|Vertex| -- можно использовать для индексов / самих вершин
+\pause
+\item \mintinline{rust}|Uniform| -- можно использовать для \textit{uniform значений} (как immediates, но больше объём)
+\pause
+\item \mintinline{rust}|Storage| -- можно использовать для \textit{random access storage}
+\pause
+\item \mintinline{rust}|Indirect| -- можно использовать для \textit{indirect draw} команд
+\pause
+\item \mintinline{rust}|QueryResolve| -- можно использовать для сохранения результатов \textit{occlusion/timestamp queries}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Buffer size}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Создание буфера работает примерно как \mintinline{cpp}|malloc|: память выделяется один раз, перевыделить её нельзя
+\pause
+\item Если вам нужен буфер другого размера, придётся его пересоздать
+\pause
+\item Для динамических данных (создаются/удаляются объекты и т.п.) придётся руками реализовывать обновление размера (примерно как в \mintinline{cpp}|std::vector|)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Буферы: запись данных}
+\begin{itemize}
+\item Записать данные в буфер можно через \mintinline{cpp}|queue|:
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+void wgpuQueueWriteBuffer(WGPUQueue queue, WGPUBuffer buffer,
+    uint64_t bufferOffset, void const * data, size_t size);
+\end{tcblisting}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item \mintinline{cpp}|buffer| -- в какой буфер грузим данные
+\item \mintinline{cpp}|bufferOffset| -- начиная с какого байта в буфере загрузить данные
+\item \mintinline{cpp}|data| -- указатель на данные
+\item \mintinline{cpp}|size| -- размер данных в байтах
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Буферы: запись данных}
+\begin{itemize}
+\item Так же, как с другими операциями, \mintinline{rust}|queue.writeBuffer| не пишет сразу в память GPU, а кладёт в очередь команду записи
+\pause
+\item После вызова \mintinline{rust}|queue.writeBuffer| с данными по указателю \mintinline{cpp}|data| можно делать всё, что угодно (в т.ч. удалить)
+\pause
+\item \begin{math}\Longrightarrow\end{math} WebGPU сначала копирует данные в собственную память, а потом инициирует отложенную загрузку на GPU
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Буферы: запись данных}
+\begin{itemize}
+\item Если мы обновляем данные в буфере каждый кадр, GPU придётся ждать, пока буфер перестанет быть нужен, чтобы обновить в нём данные
+\pause
+\item \begin{math}\Longrightarrow\end{math} WebGPU, скорее всего, внутри будет делать двойную (или тройную) буферизацию -- иметь несколько копий буфера, циклически переиспользующихся от кадра к кадру
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Mapped buffer}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Можно получить виртуальный указатель на буфер или его часть и пользоваться им для чтения/записи: \mintinline{rust}|buffer.mapAsync(mode, offset, size)|
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|mode| -- комбинация флагов \mintinline{cpp}|READ| и \mintinline{cpp}|WRITE|
+\pause
+\item \mintinline{cpp}|offset|, \mintinline{cpp}|size| -- какой диапазон буфера хотим замапить
+\end{itemize}
+\pause
+\item Эта операция \textit{асинхронная}: принимает \textit{callback}, который будет вызван, когда результат будет готов
+\pause
+\item Когда буфер запамлен:
+\begin{itemize}
+\item \mintinline{cpp}|buffer.getMappedRange/get_mapped_range_mut| -- получить указатель на чтение/запись
+\item \mintinline{cpp}|buffer.getConstMappedRange/get_mapped_range| -- получить указатель на чтение
+\end{itemize}
+\pause
+\item После использования буфер нужно отмапить: \mintinline{cpp}|buffer.unmap()|
+\pause
+\item Пока буфер замаплен, работать с буфером (загружать данные другими методами, использовать данные для рисования) нельзя
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Mapped buffer}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Mapped buffers работают через UMA/ReBAR, где это поддерживается, либо через явное копирование CPU \(\leftrightarrow\) GPU
+\pause
+\item Единственный способ \textit{прочитать} что-то из GPU буфера на CPU
+\pause
+\item Буфер можно создать с флагом \mintinline{cpp}|mappedAtCreation|, тогда он будет сразу замаплен (без асинхронного ожидания), -- удобно для буферов, данные которых загружаются только один раз при создании
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Буферы: типичный пример создания}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+// Псевдокод :)
+
+vertex_buffer = device.create_buffer(
+    size = vertices.size() * sizeof(vertex),
+    usage = VERTEX | COPY_DST
+);
+
+queue.write_buffer(&vertex_buffer, 0, vertex_buffer.size());
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин}
+\begin{itemize}
+\item Вершины -- основные входные данные графического конвейера
+\pause
+\item С точки зрения графических API, вершины характеризуются набором \textit{атрибутов}: позиция, цвет, нормаль, текстурные координаты, и т.п.
+\pause
+\item Каждый атрибут описывается отдельно, может иметь свой тип и формат хранения, -- всё это запоминается в \textit{render pipeline}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: шейдер}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+struct VertexIn
+{
+    @location(0) position : vec3f,
+    @location(1) normal : vec3f,
+    @location(2) color : vec4f,
+    @location(3) texcoord : vec2f,
+}
+\end{tcblisting}
+\pause
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Location: \mintinline{cpp}|0, 1, ... maxVertexAttributes - 1|
+\pause
+\item \mintinline{cpp}|maxVertexAttributes| \begin{math}\geq\end{math} 16
+\pause
+\item Есть тип (\mintinline{rust}|f32|/\mintinline{rust}|i32|/\mintinline{rust}|u32|) и размерность (\mintinline{rust}|1|/\mintinline{rust}|2|/\mintinline{rust}|3|/\mintinline{rust}|4|)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: формат}
+\usemintedstyle{solarized-light}
+Floating-point (\mintinline{rust}|f32|/\mintinline{rust}|vec2f|/...) форматы:
+\begin{center}
+\begin{tabular}{ |c|c|c| } 
+\hline
+ & 16-bit & 32-bit \\ 
+\hline
+1D & \mintinline{rust}|Float16| & \mintinline{rust}|Float32| \\ 
+\hline
+2D & \mintinline{rust}|Float16x2| & \mintinline{rust}|Float32x2| \\ 
+\hline
+3D & & \mintinline{rust}|Float32x2| \\ 
+\hline
+4D & \mintinline{rust}|Float16x4| & \mintinline{rust}|Float32x4| \\ 
+\hline
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: формат}
+\usemintedstyle{solarized-light}
+Unsigned integer (\mintinline{rust}|u32|/\mintinline{rust}|vec2u|/...) форматы:
+\begin{center}
+\begin{tabular}{ |c|c|c|c| } 
+\hline
+ & 8-bit & 16-bit & 32-bit \\ 
+\hline
+1D & \mintinline{rust}|Uint8| & \mintinline{rust}|Uint16| & \mintinline{rust}|Uint32| \\ 
+\hline
+2D & \mintinline{rust}|Uint8x2| & \mintinline{rust}|Uint16x2| & \mintinline{rust}|Uint32x2| \\ 
+\hline
+3D & & & \mintinline{rust}|Uint32x3| \\ 
+\hline
+4D & \mintinline{rust}|Uint8x4| & \mintinline{rust}|Uint16x4| & \mintinline{rust}|Uint32x4| \\ 
+\hline
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: формат}
+\usemintedstyle{solarized-light}
+Signed integer (\mintinline{rust}|i32|/\mintinline{rust}|vec2i|/...) форматы:
+\begin{center}
+\begin{tabular}{ |c|c|c|c| } 
+\hline
+ & 8-bit & 16-bit & 32-bit \\ 
+\hline
+1D & \mintinline{rust}|Sint8| & \mintinline{rust}|Sint16| & \mintinline{rust}|Sint32| \\ 
+\hline
+2D & \mintinline{rust}|Sint8x2| & \mintinline{rust}|Sint16x2| & \mintinline{rust}|Sint32x2| \\ 
+\hline
+3D & & & \mintinline{rust}|Sint32x3| \\ 
+\hline
+4D & \mintinline{rust}|Sint8x4| & \mintinline{rust}|Sint16x4| & \mintinline{rust}|Sint32x4| \\ 
+\hline
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: нормированные форматы}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Floating-point форматы часто слишком расточительны: большой диапазон, относительная точность
+\pause
+\item Например, цвет часто хранится 8-битным числом 0..255 и интерпретируется как число \begin{math}[0, 1]\end{math} (по формуле \mintinline{cpp}|x / 255.0|)
+\pause
+\item Такие форматы называются \textit{нормированными}: хранятся как знаковое/беззнаковое целое, но в шейдер попадают как floating-point (преобразование за нас делает GPU)
+\pause
+\begin{itemize}
+\item Для беззнаковых: \begin{math}[0, 2^{bits}-1] \rightarrow [0, 1]\end{math} по формуле \mintinline{cpp}|x / pow(2, bits)|
+\pause
+\item Для знаковых: \begin{math}[-2^{bits-1}, 2^{bits-1}-1] \rightarrow [-1, 1]\end{math} по формуле \mintinline{cpp}|clamp(x / (pow(2, bits-1) - 1), -1, 1)|
+\end{itemize}
+\pause
+\item Полезно для компактного хранения атрибутов (цвет, нормали)
+\pause
+\item Имеет смысл \textit{только} для floating-point аттрибутов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: нормированные форматы}
+\usemintedstyle{solarized-light}
+Unsigned integer нормированные форматы:
+\begin{center}
+\begin{tabular}{ |c|c|c|c| } 
+\hline
+ & 8-bit & 16-bit & 32-bit \\ 
+\hline
+1D & \mintinline{rust}|Unorm8| & \mintinline{rust}|Unorm16| & \mintinline{rust}|Unorm32| \\ 
+\hline
+2D & \mintinline{rust}|Unorm8x2| & \mintinline{rust}|Unorm16x2| & \mintinline{rust}|Unorm32x2| \\ 
+\hline
+3D & & & \mintinline{rust}|Unorm32x3| \\ 
+\hline
+4D & \mintinline{rust}|Unorm8x4| & \mintinline{rust}|Unorm16x4| & \mintinline{rust}|Unorm32x4| \\ 
+\hline
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: нормированные форматы}
+\usemintedstyle{solarized-light}
+Signed integer нормированные форматы:
+\begin{center}
+\begin{tabular}{ |c|c|c|c| } 
+\hline
+ & 8-bit & 16-bit & 32-bit \\ 
+\hline
+1D & \mintinline{rust}|Snorm8| & \mintinline{rust}|Snorm16| & \mintinline{rust}|Snorm32| \\ 
+\hline
+2D & \mintinline{rust}|Snorm8x2| & \mintinline{rust}|Snorm16x2| & \mintinline{rust}|Snorm32x2| \\ 
+\hline
+3D & & & \mintinline{rust}|Snorm32x3| \\ 
+\hline
+4D & \mintinline{rust}|Snorm8x4| & \mintinline{rust}|Snorm16x4| & \mintinline{rust}|Snorm32x4| \\ 
+\hline
+\end{tabular}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: буферы}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Разные атрибуты могут лежать в разных буферах, поэтому в \mintinline{cpp}|renderPipelineDescriptor.vertex| описывается массив \textit{buffer layouts}
+\pause
+\item Каждый \textit{buffer layout} описывает массив атрибутов, лежащих вместе в одном буфере
+\pause
+\item У каждого атрибута есть сдвиг (\textit{offset}) от начала буфера до значения атрибута нулевой вершины
+\pause
+\item У всех атрибутов одного буфера есть общее расстояние (\textit{stride}) между значениями атрибутов соседних вершин
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: stride}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Аттрибут вершины с номером \mintinline{cpp}|i| будет взят по смещению \mintinline{cpp}|offset + stride * i|
+\pause
+\begin{itemize}
+\item Нулевая вершина: \mintinline{cpp}|offset|
+\item Первая вершина: \mintinline{cpp}|offset + stride|
+\item Вторая вершина: \mintinline{cpp}|offset + 2 * stride|
+\item И т.д.
+\end{itemize}
+\pause
+\item Нужен для гибкости хранения аттрибутов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Атрибуты вершин: пример array-of-structs, один буфер}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+struct vertex {
+    float position[3];
+    float normal[3];
+    unsigned char color[4];
+};
+
+vertex_buffers = [
+    {
+        stride: sizeof(vertex),
+        attributes: [
+            { format: Float32x3, offset:  0, location: 0 },
+            { format: Float32x3, offset: 12, location: 1 },
+            { format:  Unorm8x4, offset: 24, location: 2 },
+        ],
+    },
+];
+\end{tcblisting}
+\begin{center}
+\begin{tikzpicture}
+\foreach \x
+[evaluate=\x as \ta using int(\x * 28)]
+[evaluate=\x as \tb using int(\x * 28 + 12)]
+[evaluate=\x as \tc using int(\x * 28 + 24)]
+[evaluate=\x as \td using int(\x * 28 + 28)]
+in {0, 1, 2}
+{
+\filldraw[fill=red!40!white, draw=black,thick] (3.0 * \x + 0.0, 0) rectangle (3.0 * \x + 1.0, 0.5);
+\filldraw[fill=green!40!white, draw=black,thick] (3.0 * \x + 1.0, 0) rectangle (3.0 * \x + 2.0, 0.5);
+\filldraw[fill=blue!40!white, draw=black,thick] (3.0 * \x + 2.0, 0) rectangle (3.0 * \x + 3.0, 0.5);
+\node[] at (3.0 * \x + 0.5, 0.25) {P\x};
+\node[] at (3.0 * \x + 1.5, 0.25) {N\x};
+\node[] at (3.0 * \x + 2.5, 0.25) {C\x};
+\node[] at (3.0 * \x + 0.0, 0.75) {\ta};
+\node[] at (3.0 * \x + 1.0, 0.75) {\tb};
+\node[] at (3.0 * \x + 2.0, 0.75) {\tc};
+\node[] at (3.0 * \x + 3.0, 0.75) {\td};
+\draw[black,thick] (3.0 * \x, -0.125) -- (3.0 * \x, -0.5);
+\draw[black,thick] (3.0 * \x + 3.0, -0.125) -- (3.0 * \x + 3.0, -0.5);
+\node[] at (3.0 * \x + 1.5, -0.25) {v\x};
+}
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аттрибуты вершин: пример struct-of-arrays, три буфера}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+float positions[3 * N];
+float normals[3 * N];
+unsigned char colors[4 * N];
+
+vertex_buffers = [
+    {
+        stride: 12,
+        attributes: [ { format: Float32x3, offset: 0, location: 0 } ],
+    },
+    {
+        stride: 12,
+        attributes: [ { format: Float32x3, offset: 0, location: 1 } ],
+    },
+    {
+        stride: 4,
+        attributes: [ { format:  Unorm8x4, offset: 0, location: 2 } ],
+    },
+];
+\end{tcblisting}
+\begin{center}
+\begin{tikzpicture}
+\node[] at (0.0, 0.75) {0};
+\node[] at (4.0, 0.75) {0};
+\node[] at (8.0, 0.75) {0};
+\foreach \x
+[evaluate=\x as \ta using int(\x * 12 + 12)]
+[evaluate=\x as \tb using int(\x * 12 + 12)]
+[evaluate=\x as \tc using int(\x * 4 + 4)]
+in {0, 1, 2}
+{
+\filldraw[fill=red!40!white, draw=black,thick] (\x + 0.0, 0) rectangle (\x + 1.0, 0.5);
+\filldraw[fill=green!40!white, draw=black,thick] (\x + 4.0, 0) rectangle (\x + 5.0, 0.5);
+\filldraw[fill=blue!40!white, draw=black,thick] (\x + 8.0, 0) rectangle (\x + 9.0, 0.5);
+\node[] at (\x + 0.5, 0.25) {P\x};
+\node[] at (\x + 4.5, 0.25) {N\x};
+\node[] at (\x + 8.5, 0.25) {C\x};
+\node[] at (\x + 1.0, 0.75) {\ta};
+\node[] at (\x + 5.0, 0.75) {\tb};
+\node[] at (\x + 9.0, 0.75) {\tc};
+}
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аттрибуты вершин: как хранить?}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item По смыслу, каждый \textit{buffer layout} описывает массив структур (\textit{stride} -- размер структуры)
+\pause
+\item По умолчанию используйте один буфер со структурой вершины (например, если вершины хранятся непрерывано в памяти, e.g. \mintinline{cpp}|std::vector<vertex>|)
+\pause
+\item Если часть атрибутов постоянны, а другую часть нужно иногда обновлять -- разделите эти части по двум разным буферам
+\pause
+\item Если часть атрибутов не нужны для некоторых алгоритмов (например, для теней) -- выделите их в отдельный буфер
+\pause
+\item Некоторые форматы 3D сцен (напр. \href{https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html}{\texttt{glTF}}) хранят вершины в бинарном формате, удобном для загрузки на GPU: поддерживают несколько буферов, разный \mintinline{cpp}|stride|, и разные форматы атрибутов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Буферы с вершинами}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Для рендеринга нужно выставить буфер с вершинами через \mintinline{rust}|render_pass.set_vertex_buffer(slot, buffer)|
+\pause
+\item \mintinline{rust}|slot| -- номер \textit{buffer layout}'а в массиве \mintinline{cpp}|renderPipelineDescriptor.vertex|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аттрибуты вершин: пример полностью}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+// Инициализация:
+pipeline = createPipeline()
+vertexBuffer = loadBuffer(vertices, Usage::Vertex)
+
+// Рендеринг:
+renderPass.setPipeline(pipeline)
+renderPass.setVertexBuffer(vertexBuffer)
+renderPass.draw(vertices.size())
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Индексированный рендеринг}
+\usemintedstyle{solarized-light}
+\slideimage{spheres.png}
+\begin{itemize}
+\item В моделях одна вершина часто входит в несколько треугольников (в среднем, 6)
+\pause
+\item Если использовать примитив \mintinline{cpp}|TriangleList|, придётся копировать каждую вершину несколько раз
+\pause
+\item \mintinline{cpp}|TriangleStrip| только частично решают проблему
+\pause
+\item \begin{math}\Longrightarrow\end{math} Индексированный рендеринг
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Индексированный рендеринг}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item \mintinline{cpp}|renderPass.draw(first=3, count=5)|:
+\begin{center}
+\begin{tikzpicture}
+\foreach \x in {0, ..., 9}
+{
+\ifthenelse{\x > 2 \AND \x < 8}
+{\filldraw[fill=red!40!white, draw=black,thick] (\x, 0) rectangle (\x + 1.0, 0.5);}
+{\draw[black,thick] (\x, 0) rectangle (\x + 1.0, 0.5);}
+
+\node[] at (\x + 0.5, 0.25) {v\x};
+}
+\end{tikzpicture}
+\end{center}
+\pause
+
+\vspace{1cm}
+
+\item \mintinline{cpp}|renderPass.draw_indexed(first=3, count=5)|:
+\begin{center}
+\begin{tikzpicture}
+\foreach \x in {0, ..., 9}
+{
+\ifthenelse{\x = 6 \OR \x = 3 \OR \x = 4 \OR \x = 0 \OR \x = 8}
+{\filldraw[fill=red!40!white, draw=black,thick] (\x, 2) rectangle (\x + 1.0, 2.5);}
+{\draw[black,thick] (\x, 2) rectangle (\x + 1.0, 2.5);}
+\node[] at (\x + 0.5, 2.25) {v\x};
+}
+
+\foreach \x in {0, ..., 9}
+{
+\ifthenelse{\x > 2 \AND \x < 8}
+{\filldraw[fill=red!40!white, draw=black,thick] (\x, 0) rectangle (\x + 1.0, 0.5);}
+{\draw[black,thick] (\x, 0) rectangle (\x + 1.0, 0.5);}
+}
+\node[] at (0.5, 0.25) {3};
+\node[] at (1.5, 0.25) {0};
+\node[] at (2.5, 0.25) {5};
+\node[] at (3.5, 0.25) {6};
+\node[] at (4.5, 0.25) {3};
+\node[] at (5.5, 0.25) {4};
+\node[] at (6.5, 0.25) {0};
+\node[] at (7.5, 0.25) {8};
+\node[] at (8.5, 0.25) {0};
+\node[] at (9.5, 0.25) {1};
+
+\draw[thick,-stealth] (3.5, 0.5) -- (6.5, 1.9);
+\draw[thick,-stealth] (4.5, 0.5) -- (3.5, 1.9);
+\draw[thick,-stealth] (5.5, 0.5) -- (4.5, 1.9);
+\draw[thick,-stealth] (6.5, 0.5) -- (0.5, 1.9);
+\draw[thick,-stealth] (7.5, 0.5) -- (8.5, 1.9);
+
+% 0 1 2 3 4 5 6 7 8 9
+% 3 0 5[6 3 4 0 8]0 1
+\end{tikzpicture}
+\end{center}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Индексированный рендеринг: квадрат}
+\usemintedstyle{solarized-light}
+\begin{center}
+\begin{tikzpicture}
+\draw[black,thick] (0, 0) rectangle (3, 3);
+\draw[black,thick] (0, 3) -- (3, 0);
+\node[] at (-0.25, -0.25) {0};
+\node[] at (3.25, -0.25) {1};
+\node[] at (-0.25, 3.25) {2};
+\node[] at (3.25, 3.25) {3};
+\end{tikzpicture}
+\end{center}
+\pause
+\begin{itemize}
+\item Без индексов, \mintinline{cpp}|TriangleList|:
+\begin{itemize}
+\item Вершины: \mintinline{cpp}|v0, v1, v2, v2, v1, v3|
+\end{itemize}
+\pause
+\item Без индексов, \mintinline{cpp}|TriangleStrip|:
+\begin{itemize}
+\item Вершины: \mintinline{cpp}|v0, v1, v2, v3|
+\end{itemize}
+\pause
+\item С индексами, \mintinline{cpp}|TriangleList|:
+\begin{itemize}
+\item Вершины: \mintinline{cpp}|v0, v1, v2, v3|
+\item Индексы: \mintinline{cpp}|0, 1, 2, 2, 1, 3|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Индексированный рендеринг}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Индексы хранятся в буфере с \mintinline{cpp}|usage = Index|
+\pause
+\item \mintinline{rust}|render_pass.set_index_buffer(buffer, format)| устанавливает текущий буфер с индексами
+\pause
+\item Форматов только два: \mintinline{rust}|Uint16| и \mintinline{rust}|Uint32|
+\pause
+\item \mintinline{rust}|render_pass.draw_indexed()| вызывает индексированный рендеринг
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Индексированный рендеринг: пример}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+// Инициализация:
+pipeline = createPipeline()
+vertexBuffer = loadBuffer(vertices, Usage::Vertex)
+indexBuffer = loadBuffer(indices, Usage::Index)
+
+// Рендеринг:
+renderPass.setPipeline(pipeline)
+renderPass.setVertexBuffer(vertexBuffer)
+renderPass.setIndexBuffer(indexBuffer)
+renderPass.drawIndexed(indices.size())
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Primitive restart}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item При использовании \mintinline{cpp}|LineStrip| или \mintinline{cpp}|TriangleList| все входные вершины образуют один line strip/triangle strip
+\pause
+\item Что, если мы хотим одну последовательность вершин разбить на несколько примитивов?
+\pause
+\item Можно сделать несколько вызовов \mintinline{cpp}|render_pass.draw(...)|, но это расточительно
+\pause
+\item Максимально возможное для этого типа (\mintinline{cpp}|uint16|/\mintinline{cpp}|uint32|) значение индекса означает что со следующего индекса нужно начать новый примитив:
+\mintinline{python}|[0, 1, 2, 3, 65535, 4, 5, 6, 7]| эквивалентно
+\mintinline{python}|[0, 1, 2, 3], [4, 5, 6, 7]|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Рендеринг нескольких объектов}
+\begin{itemize}
+\item Для каждого \textit{типа объекта} (одинаковый набор атрибутов, шейдеры) -- свой pipeline
+\pause
+\item Для каждого \textit{отдельного объекта} -- свой набор буферов (напр. vertex + index)
+\pause
+\item Можно иметь общий буфер на все вершины и индексы всех объектов, если их не нужно обновлять, и делать \mintinline{rust}|render_pass.set_vertex_buffer(0, buffer, offset=...)|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Instancing}
+\begin{itemize}
+\item У настройки \textit{buffer layout}'а есть ещё один параметр -- \textit{step mode}
+\pause
+\item Значение \mintinline{cpp}|stepMode = vertex| означает, что атрибуты будут браться по \textit{номеру вершины}
+\pause
+\item Значение \mintinline{cpp}|stepMode = instance| означает, что атрибуты будут браться по \textit{номеру инстанса}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Instancing}
+\begin{itemize}
+\item \textit{Instancing}, он же \textit{instanced rendering} позволяет одним вызовом нарисовать много копий объекта
+\pause
+\item Типичная разбивка атрибутов:
+\begin{itemize}
+\item \mintinline{cpp}|stepMode = vertex| -- атрибуты вершин 3D-модели: позиции, нормали, цвета
+\item \mintinline{cpp}|stepMode = instance| -- атрибуты каждой отдельной копии: позиция, поворот, дополнительный цвет
+\end{itemize}
+\pause
+\item Как правило, vertex и instance атрибуты лежат в разных буферах
+\pause
+\item Вызов \mintinline{cpp}|render_pass.draw(vertex_count=N, instance_count=M)| обработает \(N\cdot M\) вершин: \(M\) копий модели из \(N\) вершин
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Instancing}
+\begin{itemize}
+\item Раньше instancing имел значительные накладные расходы, и использовался только для большого количества копий (сотен или тысяч)
+\pause
+\item В современных API instancing -- основная функциональность, все функции рисования (\mintinline{cpp}|render_pass.draw()|) по умолчанию работают с instancing'ом
+\end{itemize}
+\end{frame}
+
+\end{document}

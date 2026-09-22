@@ -4,6 +4,7 @@ PDFLATEX=lualatex -shell-escape -interaction=nonstopmode -halt-on-error
 
 all: pdf/lecture01.pdf pdf/practice01.pdf
 all: pdf/lecture02.pdf pdf/practice02.pdf
+all: pdf/lecture03.pdf pdf/practice03.pdf
 
 pdf/%.pdf: source/%/source.tex source/%/images/*.png
 	mkdir -p build/$(@F)

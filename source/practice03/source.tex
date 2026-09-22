@@ -1,0 +1,238 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2025
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 3: Буферы, атрибуты вершин, кривые Безье}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Кривые Безье}
+\begin{itemize}
+\item Используются для генерации плавных кривых
+\pause
+\item Строются по набору точек \begin{math}p_0, p_1, \dots, p_n\end{math}
+\pause
+\item Кривая Безье с параметром \begin{math}t \in [0, 1]\end{math} определяется как \textit{аффинная комбинация}
+
+\begin{center}
+\begin{math}
+b(t) = \sum\limits_{k=0}^n b_{k,n}(t) \cdot p_k
+\end{math}
+\end{center}
+
+\pause
+\item Коэффициенты -- полиномы Бернштейна:
+
+\begin{center}
+\begin{math}
+b_{k,n}(t) = \binom{n}{k}t^k(1-t)^{n-k}
+\end{math}
+\end{center}
+
+\pause
+\item Кривая первого порядка (\begin{math}n=1\end{math}): отрезок \begin{math}p_0 p_1\end{math}
+
+\begin{center}
+\begin{math}
+b(t) = (1-t)\cdot p_0 + t \cdot p_1
+\end{math}
+\end{center}
+
+\pause
+\item Кривая второго порядка (\begin{math}n=2\end{math}):
+
+\begin{center}
+\begin{math}
+b(t) = (1-t)^2 \cdot p_0 + 2t(1-t) \cdot p_1 + t^2 \cdot p_2
+\end{math}
+\end{center}
+
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Загружаем данные в буфер на GPU
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Создайте буфер: \mintinline{cpp}|device.create_buffer|, \mintinline{cpp}$usage = CopyDst | Vertex$, размер -- 3 вершины (надо посчитать в байтах!)
+\item Загрузите в него данные \mintinline{cpp}|queue.write_buffer|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Настраиваем атрибуты
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Настройте атрибуты вершин при создании пайплайна (offset, stride, и формат надо понять по структуре \mintinline{cpp}|vertex|)
+\item Перед \mintinline{cpp}|render_pass.draw| выставьте наш буфер как вершинный \mintinline{cpp}|render_pass.set_vertex_buffer| -- должен нарисоваться треугольник
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Задание 2}
+\slideimage{2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Переходим к оконным координатам
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Заполните массив \mintinline{cpp}|viewMatrix| матрицей, которае совершает проеобразование
+
+\begin{center}
+\begin{math}
+X: [0, width] \rightarrow [-1, 1]
+\end{math}
+
+\begin{math}
+Y: [height, 0] \rightarrow [-1, 1]
+\end{math}
+\end{center}
+
+\item Измените координаты треугольника, чтобы он был заметен на экране
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Динамически добавляем/удаляем точки мышкой
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Сделайте массив вершин изначально пустым
+\item При нажатии левой кнопки мыши (\mintinline{cpp}|SDL_BUTTON_LEFT|) добавьте новую вершину в массив с координатами мыши (цвета выбирайте как угодно)
+\item При нажатии правой кнопки мыши (\mintinline{cpp}|SDL_BUTTON_RIGHT|) удалите последнюю вершину из массива, если он не пустой
+\item Если массив с вершинами изменился, обновите данные в буфере (возможно, его придётся пересоздать с большим размером)
+\item Меняем тип примитива у пайплайна на \mintinline{cpp}|LineStrip|
+\item Меняем количество вершин в \mintinline{rust}|render_pass.draw()| на размер массива вершин
+\item Данные должны обновляться \textbf{\alert{только}} когда линия изменилась!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Задание 4}
+\slideimage{4.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Генерируем и рисуем кривые Безье
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Создаёте ещё один буфер и массив вершин для точек кривой Безье
+\item Заведите параметр, управляющий уровнем детализации кривой: \mintinline{cpp}|int quality = 4;|
+\item При добавлении/удалении точек пересчитываем \textit{заново} всю кривую Безье
+\item Если в исходной ломаной \mintinline{cpp}|N| \textit{отрезков}, то в кривой Безье должно быть \mintinline{cpp}|N * quality| \textit{отрезков}
+\item Параметр \mintinline{cpp}|t| должен равномерно меняться от 0 до 1 вдоль всей кривой
+\item Цвет -- любой, но отличающийся от цвета исходной ломаной (чтобы её было лучше видно)
+\item Данные в буферах должны обновляться \textbf{\alert{только}} при их изменении
+\item Рисуем кривую, используя тот же пайплайн (но другой буфер)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Задание 5}
+\slideimage{5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Динамически меняем уровень детализации
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item При нажатии на стрелку влево (\mintinline{cpp}|SDL_LEFT|) уровень детализации \mintinline{cpp}|quality| должен уменьшаться (но не может быть меньше 1)
+\item При нажатии на стрелку вправо (\mintinline{cpp}|SDL_RIGHT|) уровень детализации \mintinline{cpp}|quality| должен увеличиваться
+\item Данные в буферах должны обновляться \textbf{\alert{только}} при их изменении!
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Задание 6}
+\slideimage{6.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+\usemintedstyle{solarized-light}
+Добавляем ползающий пунктир к кривой Безье
+\begin{itemize}
+\item Пунктира можно добиться, не рисуя половину пикселей кривой в зависимости от расстояния до начала
+\item Например, пиксели кривой на расстоянии \mintinline{cpp}|[0, 20]| от начала рисуются, на расстоянии \mintinline{cpp}|[20, 40]| от начала не рисуются, \mintinline{cpp}|[40, 60]| рисуются, и т.д.
+\item Для этого нужно добавить в вершины кривой расстояние вдоль кривой от её начала
+\item Расстояние до первой вершины = 0
+\item Расстояние до  вершины \mintinline{cpp}|i| = расстояние до  вершины \mintinline{cpp}|(i-1)| + расстояние от вершины \mintinline{cpp}|(i-1)| до вершины \mintinline{cpp}|i|
+\item Для расстояния между вершинами пригодится функция \mintinline{cpp}|math::length|
+\item Расстояние нужно интерполировать между вершинами и передать во фрагментный шейдер
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Чтобы понять, нужно ли рисовать пиксель, пригодится функция WGSL \mintinline{wgsl}|modf|
+\item Чтобы отменить рисование пикселя, нужно во фрагментном шейдере вызвать команду \mintinline{wgsl}|discard;|
+\item Само расстояние нужно добавить как поле вершины и как атрибут в пайплайне и в вершинном шейдере
+\item Чтобы пунктир двигался, можно прибавить к расстоянию что-то, зависящее от времени (придётся передать время в шейдер как часть immediates)
+\item Чтобы на исходную ломаную не применялся пунктир, придётся передать ещё какой-нибудь флаг в immediates
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Задание 7*}
+\slideimage{7.png}
+\end{frame}
+
+\end{document}
