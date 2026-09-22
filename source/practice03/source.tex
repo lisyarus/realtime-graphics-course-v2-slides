@@ -102,6 +102,7 @@ b(t) = (1-t)^2 \cdot p_0 + 2t(1-t) \cdot p_1 + t^2 \cdot p_2
 \begin{itemize}
 \item Создайте буфер: \mintinline{cpp}|device.create_buffer|, \mintinline{cpp}$usage = CopyDst | Vertex$, размер -- 3 вершины (надо посчитать в байтах!)
 \item Загрузите в него данные \mintinline{cpp}|queue.write_buffer|
+\item На Rust вам понадобится \mintinline{rust}|bytemuck::cast_slice(&vertices)|
 \end{itemize}
 \end{frame}
 
@@ -152,8 +153,8 @@ Y: [height, 0] \rightarrow [-1, 1]
 \usemintedstyle{solarized-light}
 \begin{itemize}
 \item Сделайте массив вершин изначально пустым
-\item При нажатии левой кнопки мыши (\mintinline{cpp}|SDL_BUTTON_LEFT|) добавьте новую вершину в массив с координатами мыши (цвета выбирайте как угодно)
-\item При нажатии правой кнопки мыши (\mintinline{cpp}|SDL_BUTTON_RIGHT|) удалите последнюю вершину из массива, если он не пустой
+\item При нажатии левой кнопки мыши добавьте новую вершину в массив с координатами мыши (цвета выбирайте как угодно)
+\item При нажатии правой кнопки мыши удалите последнюю вершину из массива, если он не пустой
 \item Если массив с вершинами изменился, обновите данные в буфере (возможно, его придётся пересоздать с большим размером)
 \item Меняем тип примитива у пайплайна на \mintinline{cpp}|LineStrip|
 \item Меняем количество вершин в \mintinline{rust}|render_pass.draw()| на размер массива вершин

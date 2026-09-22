@@ -162,15 +162,15 @@ void wgpuQueueWriteBuffer(WGPUQueue queue, WGPUBuffer buffer,
 \frametitle{Mapped buffer}
 \usemintedstyle{solarized-light}
 \begin{itemize}
-\item Можно получить виртуальный указатель на буфер или его часть и пользоваться им для чтения/записи: \mintinline{rust}|buffer.mapAsync(mode, offset, size)|
+\item Можно получить виртуальный указатель на буфер или его часть и пользоваться им для чтения/записи: \mintinline{rust}|buffer.mapAsync(mode, offset, size, callback)|
 \pause
 \begin{itemize}
 \item \mintinline{cpp}|mode| -- комбинация флагов \mintinline{cpp}|READ| и \mintinline{cpp}|WRITE|
 \pause
 \item \mintinline{cpp}|offset|, \mintinline{cpp}|size| -- какой диапазон буфера хотим замапить
-\end{itemize}
 \pause
-\item Эта операция \textit{асинхронная}: принимает \textit{callback}, который будет вызван, когда результат будет готов
+\item \mintinline{cpp}|callback| -- вызывается, когда буфер будет замаплен (операция \textit{асинхронная})
+\end{itemize}
 \pause
 \item Когда буфер запамлен:
 \begin{itemize}
@@ -258,7 +258,7 @@ Floating-point (\mintinline{rust}|f32|/\mintinline{rust}|vec2f|/...) форма�
 \hline
 2D & \mintinline{rust}|Float16x2| & \mintinline{rust}|Float32x2| \\ 
 \hline
-3D & & \mintinline{rust}|Float32x2| \\ 
+3D & & \mintinline{rust}|Float32x3| \\ 
 \hline
 4D & \mintinline{rust}|Float16x4| & \mintinline{rust}|Float32x4| \\ 
 \hline
@@ -519,9 +519,11 @@ in {0, 1, 2}
 \frametitle{Буферы с вершинами}
 \usemintedstyle{solarized-light}
 \begin{itemize}
-\item Для рендеринга нужно выставить буфер с вершинами через \mintinline{rust}|render_pass.set_vertex_buffer(slot, buffer)|
+\item Для рендеринга нужно выставить буфер с вершинами через \mintinline{rust}|render_pass.set_vertex_buffer(slot, buffer, offset, size)|
 \pause
 \item \mintinline{rust}|slot| -- номер \textit{buffer layout}'а в массиве \mintinline{cpp}|renderPipelineDescriptor.vertex|
+\pause
+\item \mintinline{rust}|offset|, \mintinline{rust}|size| -- позволяют использовать только часть буфера (offset'ы атрибутов будут браться относительно начала этой части)
 \end{itemize}
 \end{frame}
 
@@ -656,7 +658,7 @@ renderPass.draw(vertices.size())
 \begin{itemize}
 \item Индексы хранятся в буфере с \mintinline{cpp}|usage = Index|
 \pause
-\item \mintinline{rust}|render_pass.set_index_buffer(buffer, format)| устанавливает текущий буфер с индексами
+\item \mintinline{rust}|render_pass.set_index_buffer(buffer, format, offset, size)| устанавливает текущий буфер с индексами
 \pause
 \item Форматов только два: \mintinline{rust}|Uint16| и \mintinline{rust}|Uint32|
 \pause
