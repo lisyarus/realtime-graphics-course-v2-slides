@@ -30,6 +30,8 @@
 \definecolor{blue}{rgb}{0,0,1}
 \definecolor{red}{rgb}{1,0,0}
 
+\usemintedstyle{tango}
+
 \makeatletter
 \newcommand{\slideimage}[1]{
   \begin{figure}
@@ -98,7 +100,6 @@ b(t) = (1-t)^2 \cdot p_0 + 2t(1-t) \cdot p_1 + t^2 \cdot p_2
 \begin{frame}[fragile]
 \frametitle{Задание 1}
 Загружаем данные в буфер на GPU
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Создайте буфер: \mintinline{cpp}|device.create_buffer|, \mintinline{cpp}$usage = CopyDst | Vertex$, размер -- 3 вершины (надо посчитать в байтах!)
 \item Загрузите в него данные \mintinline{cpp}|queue.write_buffer|
@@ -109,7 +110,6 @@ b(t) = (1-t)^2 \cdot p_0 + 2t(1-t) \cdot p_1 + t^2 \cdot p_2
 \begin{frame}[fragile]
 \frametitle{Задание 2}
 Настраиваем атрибуты
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Настройте атрибуты вершин при создании пайплайна (offset, stride, и формат надо понять по структуре \mintinline{cpp}|vertex|)
 \item Перед \mintinline{cpp}|render_pass.draw| выставьте наш буфер как вершинный \mintinline{cpp}|render_pass.set_vertex_buffer| -- должен нарисоваться треугольник
@@ -124,7 +124,6 @@ b(t) = (1-t)^2 \cdot p_0 + 2t(1-t) \cdot p_1 + t^2 \cdot p_2
 \begin{frame}[fragile]
 \frametitle{Задание 3}
 Переходим к оконным координатам
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Заполните массив \mintinline{cpp}|viewMatrix| матрицей, которае совершает проеобразование
 
@@ -150,7 +149,6 @@ Y: [height, 0] \rightarrow [-1, 1]
 \begin{frame}[fragile]
 \frametitle{Задание 4}
 Динамически добавляем/удаляем точки мышкой
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Сделайте массив вершин изначально пустым
 \item При нажатии левой кнопки мыши добавьте новую вершину в массив с координатами мыши (цвета выбирайте как угодно)
@@ -170,7 +168,6 @@ Y: [height, 0] \rightarrow [-1, 1]
 \begin{frame}[fragile]
 \frametitle{Задание 5}
 Генерируем и рисуем кривые Безье
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Создаёте ещё один буфер и массив вершин для точек кривой Безье
 \item Заведите параметр, управляющий уровнем детализации кривой: \mintinline{cpp}|int quality = 4;|
@@ -191,7 +188,6 @@ Y: [height, 0] \rightarrow [-1, 1]
 \begin{frame}[fragile]
 \frametitle{Задание 6}
 Динамически меняем уровень детализации
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item При нажатии на стрелку влево (\mintinline{cpp}|SDL_LEFT|) уровень детализации \mintinline{cpp}|quality| должен уменьшаться (но не может быть меньше 1)
 \item При нажатии на стрелку вправо (\mintinline{cpp}|SDL_RIGHT|) уровень детализации \mintinline{cpp}|quality| должен увеличиваться
@@ -206,7 +202,6 @@ Y: [height, 0] \rightarrow [-1, 1]
 
 \begin{frame}[fragile]
 \frametitle{Задание 7*}
-\usemintedstyle{solarized-light}
 Добавляем ползающий пунктир к кривой Безье
 \begin{itemize}
 \item Пунктира можно добиться, не рисуя половину пикселей кривой в зависимости от расстояния до начала
@@ -221,7 +216,6 @@ Y: [height, 0] \rightarrow [-1, 1]
 
 \begin{frame}[fragile]
 \frametitle{Задание 7*}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Чтобы понять, нужно ли рисовать пиксель, пригодится функция WGSL \mintinline{wgsl}|modf|
 \item Чтобы отменить рисование пикселя, нужно во фрагментном шейдере вызвать команду \mintinline{wgsl}|discard;|

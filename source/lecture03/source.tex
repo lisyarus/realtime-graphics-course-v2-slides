@@ -30,7 +30,7 @@
 \definecolor{codebg}{RGB}{29,35,49}
 \setminted{fontsize=\footnotesize}
 
-\usemintedstyle{solarized-light}
+\usemintedstyle{tango}
 
 \makeatletter
 \newcommand{\slideimage}[1]{
@@ -69,7 +69,6 @@
 
 \begin{frame}[fragile]
 \frametitle{Буферы}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Могут хранить произвольные данные на GPU, сами никак их не интерпретируют
 \pause
@@ -85,7 +84,6 @@
 
 \begin{frame}[fragile]
 \frametitle{Buffer usage}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Возможные значения \mintinline{rust}|usage| (это битовые флаги -- их можно комбинировать):
 \pause
@@ -109,7 +107,6 @@
 
 \begin{frame}[fragile]
 \frametitle{Buffer size}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Создание буфера работает примерно как \mintinline{cpp}|malloc|: память выделяется один раз, перевыделить её нельзя
 \pause
@@ -128,7 +125,7 @@
 void wgpuQueueWriteBuffer(WGPUQueue queue, WGPUBuffer buffer,
     uint64_t bufferOffset, void const * data, size_t size);
 \end{tcblisting}
-\usemintedstyle{solarized-light}
+\usemintedstyle{tango}
 \begin{itemize}
 \item \mintinline{cpp}|buffer| -- в какой буфер грузим данные
 \item \mintinline{cpp}|bufferOffset| -- начиная с какого байта в буфере загрузить данные
@@ -160,7 +157,6 @@ void wgpuQueueWriteBuffer(WGPUQueue queue, WGPUBuffer buffer,
 
 \begin{frame}[fragile]
 \frametitle{Mapped buffer}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Можно получить виртуальный указатель на буфер или его часть и пользоваться им для чтения/записи: \mintinline{rust}|buffer.mapAsync(mode, offset, size, callback)|
 \pause
@@ -186,7 +182,6 @@ void wgpuQueueWriteBuffer(WGPUQueue queue, WGPUBuffer buffer,
 
 \begin{frame}[fragile]
 \frametitle{Mapped buffer}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Mapped buffers работают через UMA/ReBAR, где это поддерживается, либо через явное копирование CPU \(\leftrightarrow\) GPU
 \pause
@@ -235,7 +230,7 @@ struct VertexIn
 }
 \end{tcblisting}
 \pause
-\usemintedstyle{solarized-light}
+\usemintedstyle{tango}
 \begin{itemize}
 \item Location: \mintinline{cpp}|0, 1, ... maxVertexAttributes - 1|
 \pause
@@ -247,7 +242,6 @@ struct VertexIn
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: формат}
-\usemintedstyle{solarized-light}
 Floating-point (\mintinline{rust}|f32|/\mintinline{rust}|vec2f|/...) форматы:
 \begin{center}
 \begin{tabular}{ |c|c|c| } 
@@ -268,7 +262,6 @@ Floating-point (\mintinline{rust}|f32|/\mintinline{rust}|vec2f|/...) форма�
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: формат}
-\usemintedstyle{solarized-light}
 Unsigned integer (\mintinline{rust}|u32|/\mintinline{rust}|vec2u|/...) форматы:
 \begin{center}
 \begin{tabular}{ |c|c|c|c| } 
@@ -289,7 +282,6 @@ Unsigned integer (\mintinline{rust}|u32|/\mintinline{rust}|vec2u|/...) форм�
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: формат}
-\usemintedstyle{solarized-light}
 Signed integer (\mintinline{rust}|i32|/\mintinline{rust}|vec2i|/...) форматы:
 \begin{center}
 \begin{tabular}{ |c|c|c|c| } 
@@ -310,7 +302,6 @@ Signed integer (\mintinline{rust}|i32|/\mintinline{rust}|vec2i|/...) форма�
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: нормированные форматы}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Floating-point форматы часто слишком расточительны: большой диапазон, относительная точность
 \pause
@@ -319,9 +310,9 @@ Signed integer (\mintinline{rust}|i32|/\mintinline{rust}|vec2i|/...) форма�
 \item Такие форматы называются \textit{нормированными}: хранятся как знаковое/беззнаковое целое, но в шейдер попадают как floating-point (преобразование за нас делает GPU)
 \pause
 \begin{itemize}
-\item Для беззнаковых: \begin{math}[0, 2^{bits}-1] \rightarrow [0, 1]\end{math} по формуле \mintinline{cpp}|x / pow(2, bits)|
+\item Для беззнаковых: \begin{math}[0, 2^{bits}-1] \rightarrow [0, 1]\end{math} по формуле \mintinline{cpp}|x / (pow(2, bits) - 1)|
 \pause
-\item Для знаковых: \begin{math}[-2^{bits-1}, 2^{bits-1}-1] \rightarrow [-1, 1]\end{math} по формуле \mintinline{cpp}|clamp(x / (pow(2, bits-1) - 1), -1, 1)|
+\item Для знаковых: \begin{math}[-2^{bits-1}, 2^{bits-1}-1] \rightarrow [-1, 1]\end{math} по формуле \mintinline{cpp}|max(-1, x / (pow(2, bits-1) - 1))|
 \end{itemize}
 \pause
 \item Полезно для компактного хранения атрибутов (цвет, нормали)
@@ -332,7 +323,6 @@ Signed integer (\mintinline{rust}|i32|/\mintinline{rust}|vec2i|/...) форма�
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: нормированные форматы}
-\usemintedstyle{solarized-light}
 Unsigned integer нормированные форматы:
 \begin{center}
 \begin{tabular}{ |c|c|c|c| } 
@@ -353,7 +343,6 @@ Unsigned integer нормированные форматы:
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: нормированные форматы}
-\usemintedstyle{solarized-light}
 Signed integer нормированные форматы:
 \begin{center}
 \begin{tabular}{ |c|c|c|c| } 
@@ -374,7 +363,6 @@ Signed integer нормированные форматы:
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: буферы}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Разные атрибуты могут лежать в разных буферах, поэтому в \mintinline{cpp}|renderPipelineDescriptor.vertex| описывается массив \textit{buffer layouts}
 \pause
@@ -388,7 +376,6 @@ Signed integer нормированные форматы:
 
 \begin{frame}[fragile]
 \frametitle{Атрибуты вершин: stride}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Аттрибут вершины с номером \mintinline{cpp}|i| будет взят по смещению \mintinline{cpp}|offset + stride * i|
 \pause
@@ -501,7 +488,6 @@ in {0, 1, 2}
 
 \begin{frame}[fragile]
 \frametitle{Аттрибуты вершин: как хранить?}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item По смыслу, каждый \textit{buffer layout} описывает массив структур (\textit{stride} -- размер структуры)
 \pause
@@ -517,7 +503,6 @@ in {0, 1, 2}
 
 \begin{frame}[fragile]
 \frametitle{Буферы с вершинами}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Для рендеринга нужно выставить буфер с вершинами через \mintinline{rust}|render_pass.set_vertex_buffer(slot, buffer, offset, size)|
 \pause
@@ -544,7 +529,6 @@ renderPass.draw(vertices.size())
 
 \begin{frame}[fragile]
 \frametitle{Индексированный рендеринг}
-\usemintedstyle{solarized-light}
 \slideimage{spheres.png}
 \begin{itemize}
 \item В моделях одна вершина часто входит в несколько треугольников (в среднем, 6)
@@ -559,7 +543,6 @@ renderPass.draw(vertices.size())
 
 \begin{frame}[fragile]
 \frametitle{Индексированный рендеринг}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item \mintinline{cpp}|renderPass.draw(first=3, count=5)|:
 \begin{center}
@@ -621,7 +604,6 @@ renderPass.draw(vertices.size())
 
 \begin{frame}[fragile]
 \frametitle{Индексированный рендеринг: квадрат}
-\usemintedstyle{solarized-light}
 \begin{center}
 \begin{tikzpicture}
 \draw[black,thick] (0, 0) rectangle (3, 3);
@@ -654,7 +636,6 @@ renderPass.draw(vertices.size())
 
 \begin{frame}[fragile]
 \frametitle{Индексированный рендеринг}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item Индексы хранятся в буфере с \mintinline{cpp}|usage = Index|
 \pause
@@ -685,7 +666,6 @@ renderPass.drawIndexed(indices.size())
 
 \begin{frame}[fragile]
 \frametitle{Primitive restart}
-\usemintedstyle{solarized-light}
 \begin{itemize}
 \item При использовании \mintinline{cpp}|LineStrip| или \mintinline{cpp}|TriangleList| все входные вершины образуют один line strip/triangle strip
 \pause
