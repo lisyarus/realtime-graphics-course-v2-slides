@@ -59,7 +59,7 @@
 \item Экран -- двухмерный, в системе координат WebGPU \begin{math}[-1, 1] \times [-1, 1]\end{math}
 \pause
 \begin{itemize}
-\item Координата Z в OpenGL \begin{math}[-1, 1]\end{math}, в остальных API (включая WebGPU) \begin{math}[0, 1]\end{math}
+\item Координата Z в OpenGL -- \begin{math}[-1, 1]\end{math}, в остальных API (включая WebGPU) -- \begin{math}[0, 1]\end{math}
 \item Про неё поговорим подробнее чуть позже
 \end{itemize}
 \pause
@@ -556,14 +556,62 @@ x/z \\ y/z \\ 1
 \slideimage{painters-fail.png}
 \end{frame}
 
+\begin{frame}<1-2>[fragile,label=back_face_culling]
+\frametitle{Back-face culling}
+\begin{itemize}
+\item Другая идея: договоримся, что все треугольники описаны в порядке \textit{против часовой стрелки}, если смотреть на модель \textit{снаружи}
+\pause
+\item Тогда можно не рисовать треугольники, оказавшиеся на экране \textit{по часовой стрелке} -- они будут скрыты другими треугольниками ближе к камере
+\pause
+\begin{itemize}
+\item Из-за этого в некоторых играх вы видите объекты насквозь, когда проваливаетесь в них
+\end{itemize}
+\pause
+\item Работает только для сплошных 3D моделей без ``дырок'', имеющих внутренность (напр. \textit{manifold mesh})
+\pause
+\item Решает проблему наложения только для выпуклых моделей
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Back-face culling}
+\slideimage{back-face-culling.png}
+\end{frame}
+
+\againframe<2->{back_face_culling}
+
+\begin{frame}[fragile]
+\frametitle{Back-face culling}
+\begin{itemize}
+\item Выключен по умолчанию
+\pause
+\item Настроить, какие грани отсекаются -- \mintinline{rust}|renderPipelineDescriptor.primitive.cullFace|: может быть \mintinline{cpp}|None|, \mintinline{cpp}|Front|, или \mintinline{cpp}|Back|
+\pause
+\item Настроить, какие треугольники считаются \mintinline{cpp}|Front|, а какие \mintinline{cpp}|Back| -- \mintinline{cpp}|renderPipelineDescriptor.primitive.cullFace|: может быть \mintinline{cpp}|CW| bkb  \mintinline{cpp}|CCW|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Back-face culling}
+\begin{itemize}
+\item Стандарт индустрии: Front -- это CCW (против часовой стрелки)
+\pause
+\item Лучше всего его \textit{никогда не менять}: большинство форматов и инструментов следуют этой договорённости
+\pause
+\item Порядок вершин в \mintinline{cpp}|TriangleStrip| чётко определён, чтобы сохранять ориентацию вершин
+\pause
+\item Имеет смысл включать всегда, когда это возможно: перед этапом растеризации отсекается где-то половина треугольников
+\end{itemize}
+\end{frame}
+
 \begin{frame}[fragile]
 \frametitle{Z-буфер}
 \begin{itemize}
-\item Решение: \textit{буфер глубины} (z-buffer)
+\item Общее решение проблемы наложения объектов: \textit{буфер глубины} (z-buffer)
 \pause
 \item Одноцветная текстура (изображение) такого же размера, как экран/окно
 \pause
-\item Его нужно создать самим и привязать к render pass'у
+\item Его нужно создать самим и привязать к \mintinline{rust}|render_pass|'у
 \pause
 \item Каждый пиксель хранит расстояние от нарисованного на экране пикселя до камеры
 \end{itemize}
