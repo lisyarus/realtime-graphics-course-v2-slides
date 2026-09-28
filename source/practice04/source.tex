@@ -1,0 +1,221 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2025
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 4: Индексированный рендеринг, перспективная проекция, буфер глубины}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Формат OBJ}
+\begin{itemize}
+\item Простой текстовый формат описания 3D моделей
+\item Обычно используется для старых моделей, для простоты чтения и хранения
+\item Довольно неоптимален по занимаемой памяти (потому что текстовый)
+\item Поддерживает нормали, текстурные координаты, и простейшие материалы
+\item В заготовке практики уже есть загрузчик OBJ файлов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Практика 4}
+\begin{itemize}
+\item В этой практике нельзя менять код шейдеров!
+\item Все преобразования модели (сдвиги, повороты, и т.п.) и настройки камеры нужно выполнять через матрицы \mintinline{cpp}|model|, \mintinline{cpp}|view| и \mintinline{cpp}|projection|
+\item В C++ матрицы заполняем по строкам, в Rust -- по столбцам (так устроены используемые библиотеки матриц)
+\item \textbf{NB}: математическими библиотеками (\mintinline{rust}|glam| в Rust, \mintinline{cpp}|math| в C++) пользоваться пока нельзя :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Практика 4}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Рисуем зайца
+\begin{itemize}
+\item В объекте \mintinline{cpp}|bunny| уже загружены вершины и индексы 3D модели
+\item Настраиваем атрибуты вершин в \mintinline{cpp}|RenderPipelineDescriptor|'е (см. поля структуры \mintinline{cpp}|ObjVertex| -- нам нужны только первые два)
+\item Создаём буферы для вершин (\mintinline{cpp}|usage = Vertex|) и индексов (\mintinline{cpp}|usage = Index|), загружаем в них данные (один раз, на старте программы)
+\item При рисовании устанавливаем \mintinline{cpp}|render_pass|'у наши буферы: \mintinline{cpp}|render_pass.set_vertex_buffer()|, \mintinline{cpp}|render_pass.set_index_buffer()|
+\item Рисуем при помощи \mintinline{cpp}|render_pass.draw_indexed()|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+\slideimage{1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Вращаем зайца
+\begin{itemize}
+\item Меняем матрицу \mintinline{cpp}|model| чтобы заяц крутился в \textbf{плоскости XZ}
+\item В качестве угла нужно взять что-нибудь зависящее от времени, например \mintinline{cpp}|angle = time;|
+\item Заяц будет обрезаться по \begin{math}z \in [0, 1]\end{math} (особенно хорошо видно, что обрезаются уши и часть головы)
+\item Отмасштабируем его \textit{по всем осям} \mintinline{cpp}|scale = 0.5f|, тоже с помощью матрицы \mintinline{cpp}|model|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Добавляем перспективу
+\begin{itemize}
+\item Выбираем значения \mintinline{cpp}|near|, \mintinline{cpp}|far|, \mintinline{cpp}|top|, \mintinline{cpp}|right|
+\begin{itemize}
+\item \mintinline{cpp}|near| -- маленький, но не слишком, в духе \begin{math}0.001 \dots 0.1\end{math}
+\item \mintinline{cpp}|far| -- большой, но не слишком, в духе \begin{math}10.0 \dots 1000.0\end{math}
+\item Отношение \mintinline{cpp}|right/near| -- тангенс половины угла обзора, например \mintinline{cpp}|right = near| соответствует углу обзора в \begin{math}90^\circ\end{math}
+\item Отношение \mintinline{cpp}|right/top| -- aspect ratio экрана (\mintinline{cpp}|width/height|)
+\end{itemize}
+\item В матрицу \mintinline{cpp}|projection| записываем матрицу проекции с использованием выбранных значений (см. слайд с лекции)
+\item Заяц будет виден изнутри
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Включаем тест глубины
+\begin{itemize}
+\item Сдвигаем камеру по оси Z на какое-то расстояние (например, на 2-3 единицы), меняя матрицу \mintinline{cpp}|view|
+\begin{itemize}
+\item N.B.: Камера смотрит в сторону -Z, поэтому \textit{сдвиг камеры} должен быть в сторону \textit{положительной} оси Z
+\item N.B.: При этом матрица \mintinline{cpp}|view| содержит \textit{обратное преобразование!}
+\end{itemize}
+\item Заяц будет рисоваться неправильно: задние грани перекрывают передние
+\item Настраиваем тест глубины в \mintinline{cpp}|RenderPipelineDescriptor|: \mintinline{cpp}|format = Depth24Plus|, \mintinline{cpp}|depthWriteEnabled = true| (в C++ \mintinline{cpp}|WGPUOptionalBool_True|), \mintinline{cpp}|depthCompare = Less|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Создаём буфер глубины
+
+% \textit{Cтрашное задание, но нужно просто много перепечатать со слайда :)}
+\begin{itemize}
+\item Заводим объекты \mintinline{cpp}|depthBuffer: WGPUTexture| и \mintinline{cpp}|depthBufferView: WGPUTextureView|
+\item Их нужно создать на старте + пересоздавать каждый раз, когда изменились размеры экрана
+\item \mintinline{cpp}|depthBuffer| создаём через \mintinline{cpp}|device.create_texture|, параметры: \mintinline{cpp}|usage = RenderAttachment|, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|size = {width, height, 1}|, \mintinline{cpp}|format = Depth24Plus|
+\item \mintinline{cpp}|depthBufferView| создаём через \mintinline{cpp}|depthBuffer.create_view|, параметры: \mintinline{cpp}{usage = RenderAttachment | TransientAttachment}, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|format = Depth24Plus|, \mintinline{cpp}|aspect = DepthOnly|, \mintinline{cpp}|mipLevelCount = 1|, \mintinline{cpp}|arrayLayerCount = 1|
+\item Добавляем \mintinline{cpp}|depthStencilAttachment| в наш \mintinline{cpp}|renderPass|: \mintinline{cpp}|view = depthBufferView|, \mintinline{cpp}|depthLoadOp = Clear|, \mintinline{cpp}|depthStoreOp = Discard|, \mintinline{cpp}|depthClearValue = 1.0|, \mintinline{cpp}|depthReadOnly = false|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+\slideimage{4.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Двигаем зайца
+\begin{itemize}
+\item Заведём переменные \mintinline{cpp}|bunny_x| и \mintinline{cpp}|bunny_y| с координатами центра зайца по X и Y
+\item Изменим матрицу \mintinline{cpp}|model|, добавив соответствующие сдвиги по X и Y
+\item Перед рисованием каждого кадра обновим положение зайца:
+\begin{itemize}
+\item Если нажата клавиша влево (\mintinline{cpp}|SDLK_LEFT| в C++ / \mintinline{rust}|KeyCode::ArrowLeft| в Rust), сдвинем зайца влево: \mintinline{cpp}|bunny_x -= speed * dt|
+\item Аналогично \mintinline{cpp}|RIGHT|, \mintinline{cpp}|DOWN|, \mintinline{cpp}|UP|
+\item Состояние нажатости клавиш доступно в словаре \mintinline{cpp}|keydown| / \mintinline{cpp}|app.keydown|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\slideimage{5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Играем с face culling
+\begin{itemize}
+\item Включим back-face culling: установим \mintinline{cpp}|renderPipelineDescriptor.primitive.cullMode = Back|
+\item Ничего не изменится: заяц сделан так, чтобы все треугольники были CCW
+\item Изменим режим на \mintinline{cpp}|Front|
+\item Должны быть видны задние грани зайца и не видны передние
+\item Выглядеть будет странно -- не пугайтесь, попробуйте увидеть и понять, что происходит :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\slideimage{6.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+Три вращающихся зайца
+\begin{itemize}
+\item Рисуем три зайца в разных местах, вращающихся в плоскостях XY, XZ, YZ соответственно
+\item Три раза настраиваем матрицу \mintinline{cpp}|model| + делаем \mintinline{cpp}|glUniformMatrix| + \mintinline{cpp}|glDrawElements|
+\item Всё ещё можно двигать стрелочками, т.е. должны учитываться \verb|bunny_x| и \verb|bunny_y| (для одного зайца, или для всех -- как хотите)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+\slideimage{7.png}
+\end{frame}
+
+
+\end{document}
