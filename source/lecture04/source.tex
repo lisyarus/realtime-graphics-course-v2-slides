@@ -587,14 +587,14 @@ x/z \\ y/z \\ 1
 \pause
 \item Настроить, какие грани отсекаются -- \mintinline{rust}|renderPipelineDescriptor.primitive.cullFace|: может быть \mintinline{cpp}|None|, \mintinline{cpp}|Front|, или \mintinline{cpp}|Back|
 \pause
-\item Настроить, какие треугольники считаются \mintinline{cpp}|Front|, а какие \mintinline{cpp}|Back| -- \mintinline{cpp}|renderPipelineDescriptor.primitive.cullFace|: может быть \mintinline{cpp}|CW| bkb  \mintinline{cpp}|CCW|
+\item Настроить, какие треугольники считаются \mintinline{cpp}|Front|, а какие \mintinline{cpp}|Back| -- \mintinline{cpp}|renderPipelineDescriptor.primitive.frontFace|: может быть \mintinline{cpp}|CW| или  \mintinline{cpp}|CCW|
 \end{itemize}
 \end{frame}
 
 \begin{frame}[fragile]
 \frametitle{Back-face culling}
 \begin{itemize}
-\item Стандарт индустрии: Front -- это CCW (против часовой стрелки)
+\item Стандарт индустрии: Front -- это CCW (counterclockwise, против часовой стрелки)
 \pause
 \item Лучше всего его \textit{никогда не менять}: большинство форматов и инструментов следуют этой договорённости
 \pause
@@ -1177,13 +1177,13 @@ X_z & Y_z & Z_z & C_z \\
 \begin{itemize}
 \item Пусть \begin{math}T=\operatorname{Projection}\cdot\operatorname{View}\end{math} -- матрица камеры
 \pause
-\item При ортографической проекции центр видимой области переходит в \begin{math}(0,0,0,1)\end{math}
+\item При ортографической проекции центр видимой области переходит в \begin{math}(0,0,0.5,1)\end{math}
 \pause
-\item \begin{math}\Longrightarrow\end{math} нужно вычислить \begin{math}T^{-1} \cdot (0,0,0,1)\end{math}
+\item \begin{math}\Longrightarrow\end{math} нужно вычислить \begin{math}T^{-1} \cdot (0,0,0.5,1)\end{math}
 \pause
-\item При перспективной проекции центр проекции переходит в бесконечно удалённую точку \begin{math}(0,0,-1,0)\end{math}
+\item При перспективной проекции центр проекции переходит в бесконечно удалённую точку \begin{math}(0,0,1,0)\end{math}
 \pause
-\item \begin{math}\Longrightarrow\end{math} нужно вычислить \begin{math}T^{-1} \cdot (0,0,-1,0)\end{math} и применить к результату perspective divide (разделить XYZ на W)
+\item \begin{math}\Longrightarrow\end{math} нужно вычислить \begin{math}T^{-1} \cdot (0,0,1,0)\end{math} и применить к результату perspective divide (разделить XYZ на W)
 \pause
 \item Полезно, когда позиция камеры не задаётся явно, а вычисляется на основе других величин (точка фокуса камеры, углы поворота, расстояние до фокуса, etc)
 \end{itemize}
@@ -1314,6 +1314,24 @@ T^{-1} \begin{pmatrix}P_X \\ P_Y \\ P_Z \\ 1\end{pmatrix}
 \operatorname{Proj} T^{-1} \begin{pmatrix}a \\ b \\ c \\ 1\end{pmatrix}
 \end{math}
 \end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Бонус: как перевести из экранных координат в мировые?}
+\begin{itemize}
+\item Пусть \begin{math}\operatorname{Inj}\end{math} -- оператор, вкладывающий 3D пространство как аффинное подпространство в 4D:
+\begin{center}
+\begin{math}
+\operatorname{Inj}\begin{pmatrix}x \\ y \\ z\end{pmatrix} = \begin{pmatrix}x \\ y \\ z \\ 1\end{pmatrix}
+\end{math}
+\end{center}
+\item Тогда
+\begin{center}
+\begin{math}
+\left(\operatorname{Proj} \cdot T \cdot \operatorname{Inj}\right)^{-1} = \operatorname{Proj} \cdot T^{-1} \cdot \operatorname{Inj}
+\end{math}
+\end{center}
+\end{itemize}
 \end{frame}
 
 \begin{frame}[fragile]
