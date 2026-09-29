@@ -155,7 +155,7 @@
 \item Заводим объекты \mintinline{cpp}|depthBuffer: WGPUTexture| и \mintinline{cpp}|depthBufferView: WGPUTextureView|
 \item Их нужно создать на старте + пересоздавать каждый раз, когда изменились размеры экрана
 \item \mintinline{cpp}|depthBuffer| создаём через \mintinline{cpp}|device.create_texture|, параметры: \mintinline{cpp}|usage = RenderAttachment|, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|size = {width, height, 1}|, \mintinline{cpp}|format = Depth24Plus|
-\item \mintinline{cpp}|depthBufferView| создаём через \mintinline{cpp}|depthBuffer.create_view|, параметры: \mintinline{cpp}{usage = RenderAttachment | TransientAttachment}, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|format = Depth24Plus|, \mintinline{cpp}|aspect = DepthOnly|, \mintinline{cpp}|mipLevelCount = 1|, \mintinline{cpp}|arrayLayerCount = 1|
+\item \mintinline{cpp}|depthBufferView| создаём через \mintinline{cpp}|depthBuffer.create_view|, параметры: \mintinline{cpp}{usage = RenderAttachment}, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|format = Depth24Plus|, \mintinline{cpp}|aspect = DepthOnly|, \mintinline{cpp}|mipLevelCount = 1|, \mintinline{cpp}|arrayLayerCount = 1|
 \item Добавляем \mintinline{cpp}|depthStencilAttachment| в наш \mintinline{cpp}|renderPass|: \mintinline{cpp}|view = depthBufferView|, \mintinline{cpp}|depthLoadOp = Clear|, \mintinline{cpp}|depthStoreOp = Discard|, \mintinline{cpp}|depthClearValue = 1.0|, \mintinline{cpp}|depthReadOnly = false|
 \end{itemize}
 \end{frame}
@@ -207,7 +207,7 @@
 Три вращающихся зайца
 \begin{itemize}
 \item Рисуем три зайца в разных местах, вращающихся в плоскостях XY, XZ, YZ соответственно
-\item Три раза настраиваем матрицу \mintinline{cpp}|model| + делаем \mintinline{cpp}|glUniformMatrix| + \mintinline{cpp}|glDrawElements|
+\item Три раза настраиваем матрицу \mintinline{cpp}|model| + делаем \mintinline{cpp}|render_pass.set_immediates()| + рисуем \mintinline{cpp}|render_pass.draw_indexed()|
 \item Всё ещё можно двигать стрелочками, т.е. должны учитываться \verb|bunny_x| и \verb|bunny_y| (для одного зайца, или для всех -- как хотите)
 \end{itemize}
 \end{frame}
