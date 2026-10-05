@@ -1,0 +1,179 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2025
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 5: Bind groups, uniform буферы, текстуры, сэмплеры}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Практика 5}
+\begin{itemize}
+\item Начиная с этой практики можно вовсю пользоваться математическими библиотеками (\mintinline{rust}|glam| в Rust, \mintinline{cpp}|math| в C++)
+\item \alert{\textbf{NB}}: в Rust glam матрицы хранятся по столбцам (как и ожидает WebGPU), в C++ math -- по строкам (надо их транспонировать, либо умножать в шейдере с другой стороны)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Практика 5}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Создаём uniform buffer и bind группу
+\begin{itemize}
+\item Размер буфера -- как у immediates, \mintinline{cpp}|usage = Uniform|
+\item Создаём bind group layout с одним entry: \mintinline{cpp}|binding = 0|, \mintinline{cpp}|visibility = Vertex|, \mintinline{cpp}|buffer.type = Uniform|
+\item Создаём bind group с этим layout, тоже с одним entry: \mintinline{cpp}|binding = 0|, \mintinline{cpp}|buffer =| наш буфер
+\item \textbf{\alert{NB}}: Пока ничего не изменится, мы никак не используем этот буфер :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Используем uniform buffer
+\begin{itemize}
+\item Убираем \mintinline{cpp}|immediateSize| из pipeline layout'а
+\item Добавляем наш bind group layout в pipeline layout
+\item Запись immediates в render pass'е заменяем на запись в наш буфер (\mintinline{cpp}|queue.write_buffer|) \textbf{перед созданием} render pass'а (в том же формате: сначала матрица \mintinline{cpp}|model|, затем \mintinline{cpp}|viewProjection|)
+\item Добавляем \mintinline{cpp}|render_pass.set_bind_group(0, bind_group)| перед вызовом \mintinline{cpp}|draw_indexed()|
+\item В шейдере заменяем \mintinline{wgsl}|var<immediate>| на \mintinline{wgsl}|@group(0) @binding(0) var<uniform>|
+\item Если всё сделать правильно, картинка не изменится -- мы берём те же матрицы, но теперь из другого места
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Добавляем текстурные координаты
+\begin{itemize}
+\item Добавляем в render pipeline ещё один атрибут вершины, \mintinline{cpp}|shaderLocation = 2|, формат \mintinline{cpp}|vec2f| (в массиве вершин он уже есть)
+\item Передаём его из вершинного шейдера во фрагментный
+\item Выводим его в качестве цвета, например как \mintinline{wgsl}|vec4f(texcoord, 0.0, 1.0)|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Загружаем текстуру
+\begin{itemize}
+\item Создаём текстуру: \mintinline{cpp}|device.create_texture()|, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|format = RGBA8|, \mintinline{cpp}{usage = CopyDst | TextureBinding}, размер взять из \mintinline{cpp}|cow_image|
+\item Загружаем пиксели в нашу текстуру: \mintinline{cpp}|queue.write_texture()|, \mintinline{cpp}|aspect = All|, \mintinline{cpp}|bytes_per_row = cow_image.width * 4|, \mintinline{cpp}|rows_per_image = cow_image.height|
+\item Создаём texture view (дескриптор можно оставить пустым -- все дефолтные настройки нам подойдут)
+\item \textbf{\alert{NB}}: Картинка не изменится, мы никак не используем текстуру :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Создаём сэмплер и используем текстуру
+\begin{itemize}
+\item Добавляем ещё два entry в bind group layout: 
+\begin{itemize}
+\item \mintinline{cpp}|binding = 1|, \mintinline{cpp}|visibility = Fragment|, \mintinline{cpp}|texture.view_dimension = 2D|, \mintinline{cpp}|texture.sample_type = Float|
+\item \mintinline{cpp}|binding = 2|, \mintinline{cpp}|visibility = Fragment|, \mintinline{cpp}|sampler.type = Filtering|
+\end{itemize}
+\item Создаём sampler: \mintinline{cpp}|device.create_sampler()|, \mintinline{cpp}|address_mode = Repeat|, \mintinline{cpp}|mag_filter = Nearest|, \mintinline{cpp}|min_filter = linear|, \mintinline{cpp}|mipmap_filter = Nearest|
+\item Добавляем texture view и sampler в bind группу
+\item В шейдере:
+\begin{itemize}
+\item Возвращаем нормальный цвет вместо текстурных координат
+\item Добавляем текстуру и сэмплер
+\item Записываем результат вызова \mintinline{wgsl}|textureSample(...)| в переменную \mintinline{wgsl}|albedo|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\slideimage{5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Загружаем mipmaps
+\begin{itemize}
+\item При создании текстуры указываем \mintinline{cpp}|mip_level_count = 4|
+\item Нулевой уровень -- сама основная текстура, она уже загружена
+\item Заполним оставшиеся 3 уровня красным, зелёным, и синим цветами, соответственно
+\item Каждый следующий уровень должен быть в 2 раза меньше предыдущего по обеим осям!
+\item Подвигайте камеру, чтобы увидеть, как включаются разные mipmap-уровни
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\slideimage{6.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+Анимируем текстуру
+\begin{itemize}
+\item Добавим что-нибудь к текстурным координатам во фрагментном шейдере, чтобы текстура двигалась со временем
+\item Нужно будет как-то передать время в шейдер: можно как часть uniform-buffer'а, можно как immediate
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+\slideimage{7.png}
+\end{frame}
+
+\end{document}
