@@ -1,0 +1,180 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2025
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Домашнее задание 1: Планетная система}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\slideimage{screenshot.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание}
+\begin{itemize}
+\item Сцена с Солнцем, планетами, и звёздами
+\item Вокруг некоторых планет есть спутники или кольца
+\item Планеты вращаются вокруг Солнца, спутники -- вокруг планет
+\item Звёзды неподвижны и ``бесконечно далеки''
+\item Планеты и Солнце крутятся вокруг своей оси и как-нибудь раскрашены
+\item Цвета у Солнца меняются анимированно, вокруг Солнца -- фейковое сияние
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile,label=sun_planets]
+\frametitle{Камера}
+\begin{itemize}
+\item Камера должна достаточно свободно двигаться
+\item Идеально: WASD -- двигаемся вперёд/назад/влево/вправо, движение мыши -- вращаем камеру
+\item Удобно хранить 3D координаты самой камеры + два угла поворота (надо разобраться, вокруг каких осей)
+\item В начале программы сделайте \mintinline{cpp}|app.grab_mouse(true)| -- это не даст курсору мыши выйти за пределы окна
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile,label=sun_planets]
+\frametitle{Солнце и планеты}
+\begin{itemize}
+\item Нужно сгенерировать кодом 3D модель сферы, вариантов много -- UV-sphere, icosphere, subdivided cube
+\item Главное -- чтобы она была с индексами, без дырок, и без дублирующихся вершин (\textit{manifold mesh})
+\item На все планеты и Солнце -- один буфер с 3D моделью сферы, но у каждого свой буфер с цветами вершин (как-нибудь их сгенерируйте)
+\item Шейдер Солнца просто выводит цвета как есть, а шейдер планет использует освещение по формуле
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+// world_position - позиция в 3D пространстве
+// считаем, что Солнце находится в начале координат
+color * max(0.0, dot(normal, -normalize(world_position)))
+\end{tcblisting}
+\item Цвета Солнца как-нибудь анимируются на CPU и каждый кадр загружаются на GPU
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{3D модель сферы}
+\slideimage{sphere-combined.png}
+\end{frame}
+
+\begin{frame}[fragile,label=sun_planets]
+\frametitle{Солнце и планеты}
+\begin{itemize}
+\item Планеты движутся вокруг Солнца и вращаются вокруг своей оси (ось может быть наклонена)
+\item Спутники движутся вокруг своих планет и вращаются вокруг своей оси
+\item Солнце тоже вращается вокруг своей оси
+\item Все эти повороты, сдвиги, и масштабирования должны делаться одной матрицей \mintinline{cpp}|model|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\slideimage{moons.png}
+\end{frame}
+
+\begin{frame}[fragile,label=sun_planets]
+\frametitle{Кольца}
+\begin{itemize}
+\item Для колец нужно сгенерировать отдельную 3D модель ``кольца''
+\item Она будет односторонней (без внутренности), и будет неправильно освещаться с ``обратной'' стороны
+\item Для этого есть полезный флаг во фрагментном шейдере \mintinline{wgsl}|@builtin(front_facing) : bool| -- если он равен \mintinline{rust}|false|, домножим вектор нормали на -1
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\slideimage{rings.png}
+\end{frame}
+
+\begin{frame}[fragile,label=sun_planets]
+\frametitle{Свечение солнца}
+\begin{itemize}
+\item Для свечения Солнца можно использовать ту же 3D модель кольца, но заставить её повернуться в сторону Солнца
+\item Например, взять направление из Солнца на камеру за ось Y, взять любые две перпендикулярных ей и друг другу оси X и Z, и построить из них матрицу поворота
+\item Для динамического свечения можно тоже динамически обновлять буфер с цветами
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\slideimage{sun.png}
+\end{frame}
+
+\begin{frame}[fragile,label=sun_planets]
+\frametitle{Звёзды}
+\begin{itemize}
+\item Для звёзд лучше использовать модель попроще (например, октаэдр или низкополигональную сферу)
+\item Все звёзды должны рисоваться одной командой и использовать instancing: нужен отдельный буфер с инстансами звёзд (например, положение, цвет, размер), и правильная настройка render pipeline
+\item Цвета звёзд можно взять случайными, а можно взять из формул blackbody spectrum :)
+\item Позиции звёзд можно сделать случайными единичными векторами
+\item Чтобы звёзды казались бесконечно далеко, рисуем их самыми первыми в кадре, без теста глубины и без записи в буфер глубины (это может быть отдельный render pass, или правильно настроенный pipeline), и используем для них особую view-матрицу камеры, в которой есть поворот, но нет сдвига на позицию камеры
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\slideimage{stars.png}
+\end{frame}
+
+\begin{frame}[fragile,label=sun_planets]
+\frametitle{Баллы}
+\footnotesize
+\begin{itemize}
+\item \textbf{1 балл}: рисуются хоть какие-то сферы
+\item \textbf{1 балл}: модель сферы -- manifold mesh
+\item \textbf{1 балл}: камера двигается по WASD
+\item \textbf{1 балл}: камера крутится мышью
+\item \textbf{1 балл}: есть центральное Солнце и планеты вокруг него
+\item \textbf{1 балл}: есть спутники
+\item \textbf{1 балл}: есть кольца
+\item \textbf{1 балл}: все вращаются вокруг своей оси
+\item \textbf{2 балла}: у Солнца анимируются цвета
+\item \textbf{1 балл}: есть звёзды
+\item \textbf{2 балла}: все звёзды рисуются одним instanced draw
+\item \textbf{2 балла}: У Солнца есть ``свечение''
+\end{itemize}
+Всего: \textbf{15 баллов}
+
+Защита заданий на практике \textbf{через 2 недели}.
+\end{frame}
+
+\end{document}
