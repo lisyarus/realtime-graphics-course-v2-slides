@@ -1,0 +1,1025 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations}
+\usetikzlibrary{decorations.pathreplacing}
+\usepackage{xifthen}
+
+\usepackage{alltt}
+
+\usetheme{metropolis}
+\setminted{fontsize=\footnotesize}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{magenta}{rgb}{0.75,0,0.75}
+\definecolor{codebg}{RGB}{29,35,49}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\usemintedstyle{tango}
+
+\title{Компьютерная графика}
+\subtitle{Лекция 5: Bind groups, uniform буферы, текстуры, сэмплеры}
+\date{2025}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Как мы умеем передавать данные на GPU?}
+\begin{itemize}
+\item Immediates -- ограничен размер
+\pause
+\item Атрибуты вершин, индексы -- ограничены способы использования (только через растеризацию, строгий формат, нет доступа к соседним вершинам)
+\pause
+\item Хочется уметь передавать больше произвольных данных
+\pause
+\item \(\Longrightarrow\) \textit{bind группы}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind groups}
+\begin{itemize}
+\item Bind group -- контейнер объектов (\textit{bindings}), которые можно передать на GPU в шейдер
+\pause
+\item Могут содержать:
+\begin{itemize}
+\item Буферы: \textit{uniform}, \textit{storage}, \textit{read-only storage}
+\pause
+\item Текстуры (read-only изображения в памяти GPU)
+\pause
+\item Сэмплеры (настройки чтения изображений)
+\pause
+\item Storage текстуры (read-write изображения)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind groups}
+\begin{itemize}
+\item Объекты в bind группе описываются по числовым индексам
+\pause
+\item Пример bind-группы:
+\end{itemize}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+binding 0: uniform-буфер с параметрами камеры
+binding 1: environment-текстура для отражений
+binding 2: sampler для чтения текстуры отражений
+binding 3: буфер с описанием источников света
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind group layout}
+\begin{itemize}
+\item Для создания bind group нужно сначала описать \textit{bind group layout}
+\pause
+\item Layout описывает, объекты какого типа (буфер/текстура/etc) будут храниться в bind группе (без ссылки на конкретные объекты), и в каких шейдерах они будут использоваться (вершинный/фрагментный)
+\pause
+\item Пример bind group layout'а:
+\end{itemize}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+binding 0: uniform-буфер
+binding 1: 2D текстура
+binding 2: sampler
+binding 3: storage буфер
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Pipeline layout}
+\begin{itemize}
+\item При создании render pipeline нужно указать, какие ресурсы нужны этому pipeline для рисования
+\pause
+\item Это делается через создание \textit{pipeline layout}: он описывает набор bind group layout'ов, которые ему нужны
+\pause
+\item Сами bind группы внутри pipeline layout тоже описываются индексами
+\pause
+\item Пример pipeline layout'а:
+\end{itemize}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+group 0: настройки камеры и освещения
+group 1: параметры материала объекта
+group 2: вспомогательные текстуры (шум, дизеринг)
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind groups + pipelines вместе}
+\begin{itemize}
+\item \textit{Bind group / pipeline layout} описывает формат
+\pause
+\item \textit{Bind group} ссылается на конкретные данные (буфер/текстура/etc)
+\pause
+\item \textit{Render pipeline} описывает конкретный конвейер рендеринга (шейдеры + настройки примитивов + etc)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind groups + pipelines вместе}
+\begin{itemize}
+\item Разные bind группы могут использовать один и тот же bind group layout: например, layout материала объекта (набор текстур), у каждого объекта своя bind группа с конкретными текстурами
+\pause
+\item Разные render pipelines могут использовать один и тот же pipeline layout: например, ландшафт и 3D модели используют разные шейдеры, но один и тот же набор типов входных текстур и буферов (один и тот же \textit{layout})
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind groups + pipelines: пример}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=cpp, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+Bind group layout настроек камеры и освещения
+  binding 0: uniform-буфер
+  binding 1: storage-буфер
+
+Bind group с настройками камеры и освещения
+  binding 0: uniform-буфер с параметрами камеры
+  binding 1: storage-буфер с источниками света
+
+Bind group layout описания материала объекта
+  binding 0: 2D текстура
+  binding 1: 2D текстура
+  binding 2: 2D текстура
+
+Bind group с описанием материала объекта
+  binding 0: текстура альбедо (цвет)
+  binding 1: текстура нормалей
+  binding 2: текстура материала (metallic-roughness)
+
+Pipeline layout:
+  group 0: настройки камеры и освещения
+  group 1: описание материала объекта
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind groups в шейдере}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+struct Camera {
+  viewProjection: mat4x4f,
+  position: vec3f,
+  zRange: vec2f,
+}
+
+struct PointLight {
+  position: vec3f,
+  intensity: vec3f,
+  falloff: vec3f,
+}
+
+@group(0) @binding(0) var<uniform> camera : Camera;
+@group(0) @binding(1) var<storage, read> lights : array<PointLight>;
+
+@group(1) @binding(0) var albedo_texture : texture_2d<f32>;
+@group(1) @binding(1) var normal_texture : texture_2d<f32>;
+@group(1) @binding(2) var material_texture : texture_2d<f32>;
+@group(1) @binding(3) var linear_mipmap_sampler : sampler;
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bind groups + pipelines: рендеринг}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+render_pass.set_pipeline(my_pipeline)
+render_pass.set_bind_group(0, camera_bind_group)
+
+for object : objects {
+  render_pass.set_bind_group(1, object.material_bind_group)
+  render_pass.set_vertex_buffer(0, object.vertex_buffer)
+  render_pass.set_index_buffer(object.index_buffer)
+  render_pass.draw_indexed(object.index_count)
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Uniform буферы}
+\begin{itemize}
+\item Буферы, данные которых можно передать как read-only в шейдеры
+\pause
+\item Uniform-данные гарантированно не могут меняться в рамках одной команды рисования (отсюда название \textit{uniform})
+\pause
+\item Для них у GPU есть специальные кеши памяти и отдельные (``скалярные'') инстукции для их чтения
+\pause
+\item \(\Longrightarrow\) Работают быстро :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Uniform буферы}
+\begin{itemize}
+\item Такой буфер нужно создать с флагом \mintinline{cpp}|Uniform|
+\pause
+\item Тип в bind group layout: \mintinline{cpp}|buffer binding type = uniform|
+\pause
+\item Есть ограничения на размер буфера (точнее, его части), которую можно привязать к bind группе (обычно 64 Кб)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Uniform буферы vs immediates}
+\begin{itemize}
+\item У uniform-буфера размер гораздо больше, чем у immediates (в 512 раз!), зачем использовать immediates?
+\pause
+\item Uniform-буфер -- разновидность буфера, загрузить в него данные можно только через очередь \mintinline{cpp}|queue.write_buffer| (либо через асинхронный mapping, но там те же проблемы)
+\pause
+\item Последовательность команд на рисование отправляется в очередь целыми render pass'ами
+\pause
+\item \(\Longrightarrow\) Нельзя обновить данные uniform-буфера в середине render pass'а
+\pause
+\item \(\Longrightarrow\) Обычно в uniform буферах хранят данные, постоянные в течение одного кадра: параметры камеры, настройки глобального освещения
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Uniform буферы: dynamic offset}
+\begin{itemize}
+\item Есть ограниченная поддержка динамического обновления uniform-буфера в виде \textit{dynamic offsets}
+\pause
+\item Можно включить dynamic offsets для конкретного буфера в bind group layout: \mintinline{cpp}|has_dynamic_offset = true|
+\pause
+\item Функция \mintinline{cpp}|render_pass.set_bind_group()| принимает массив \textit{dynamic offsets} -- по одному на каждый uniform-буфер в этой группе, для которых включен dynamic offset
+\pause
+\item Тогда будет читаться кусок буфера, начинающийся с этого offset'а
+\pause
+\item Сами offset'ы должны быть кратны значению \mintinline{cpp}|minUniformBufferOffsetAlignment| (по умолчанию -- 256)
+\pause
+\item \(\Longrightarrow\) Можно загрузить несколько наборов данных в uniform буфер и динамически переключаться между ними
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Uniform буферы: шейдер}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+struct Camera {
+  viewProjection: mat4x4f,
+}
+
+@group(0) @binding(0) var<uniform> camera : Camera;
+
+struct Immediates {
+  model: mat4x4f,
+}
+
+var<immediate> immediates;
+
+@vertex
+fn vertex_main(in: VertexIn) -> @builtin(position) vec4f {
+  return camera.viewProjection
+    * immediates.model
+    * vec4f(in.position, 1.0);
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Uniform буферы: инициализация}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+let bind_group_layout = device.create_bind_group_layout([
+  BindGroupLayoutEntry {
+    binding: 0,
+    visibility: VERTEX,
+    type: Buffer { type: Uniform },
+  },
+])
+
+let uniform_buffer = device.create_buffer({
+  size: 64,
+  usage: CopyDst | Uniform,
+})
+
+let bind_group = device.create_bind_group(bind_group_layout, [
+  BindGroupEntry {
+    binding: 0,
+    buffer: uniform_buffer,
+  },
+])
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Uniform буферы: рендеринг}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+queue.write_buffer(uniform_buffer, &camera_matrix)
+
+... 
+
+render_pass.set_bind_group(0, bind_group)
+render_pass.set_pipeline(...)
+render_pass.set_immediates(...)
+render_pass.draw(...)
+
+...
+
+queue.submit([command_buffer.finish()])
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры}
+\begin{itemize}
+\item Текстуры -- изображения в памяти GPU (чаще -- несколько изображений)
+\pause
+\item Их можно читать из шейдеров
+\pause
+\item В них можно загружать пиксели из CPU
+\pause
+\item В них можно рисовать (вместо рисования в окно -- про это в следующий раз)
+\pause
+\item Поддерживают много специфичных для изображений операций
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=types]
+\frametitle{Типы текстур}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item 1D: одномерная текстура (полоска пикселей)
+\pause
+\item 2D: двумерная текстура
+\pause
+\item 3D: трёхмерная текстура
+\pause
+\item 1D array: массив одномерных текстур одинакового размера (не поддерживается в WebGPU)
+\pause
+\item 2D array: массив двумерных текстур одинакового размера
+\pause
+\item Cubemap -- текстуры, хранящиеся как 6 граней куба
+\pause
+\item Cubemap array
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Одномерная текстура}
+\begin{itemize}
+\item Градиенты цветов
+\item Предподсчитанные значения функций (напр. для освещения)
+\end{itemize}
+\slideimage{texture_1d.png}
+\end{frame}
+
+\againframe<1-2>{types}
+
+\begin{frame}[fragile]
+\frametitle{Двумерная текстура}
+\slideimage{texture_2d.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Двумерная текстура}
+\begin{itemize}
+\item Самый часто используемый тип
+\item Любые числовые свойства поверхностей: цвет (альбедо), нормаль, тип материала
+\item Промежуточные изображения при рендеринге: G-buffer, ID (visibility) buffer, HDR buffer
+\item Карта высот ландшафта
+\item Элементы UI
+\item Предподсчитанные значения 2D функции
+\item etc.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Карта нормалей}
+\slideimage{normal_map.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{G-buffer}
+\slideimage{gbuffer.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Карта высот}
+\slideimage{iceland_heightmap.png}
+\end{frame}
+
+\againframe<2-3>{types}
+
+\begin{frame}[fragile]
+\frametitle{Трёхмерная текстура}
+\slideimage{texture_3d.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Трёхмерная текстура}
+\begin{itemize}
+\item Любые числовые свойства пространства: плотность, цвет, коэффициент рассеяния
+\item Объёмные (volumetric) данные: дым, туман, и т.п.
+\item Воксельные данные
+\item Предподсчитанные значения 3D функции
+\end{itemize}
+\end{frame}
+
+\againframe<3-4>{types}
+
+\begin{frame}[fragile]
+\frametitle{Массив одномерных текстур}
+\begin{itemize}
+\item Набор градиентов цветов
+\end{itemize}
+\slideimage{texture_1d_array.png}
+\end{frame}
+
+\againframe<4-5>{types}
+
+\begin{frame}[fragile]
+\frametitle{Массив двумерных текстур}
+\begin{itemize}
+\item Массив текстур для однотипных объектов, например, вокселей
+\end{itemize}
+\slideimage{texture_2d_array.png}
+\end{frame}
+
+\againframe<5-6>{types}
+
+\begin{frame}[fragile]
+\frametitle{Cubemap-текстура}
+\begin{itemize}
+\item Небо (skybox), отражения (environment map, reflection map), предпосчитанные значения функции на сфере
+\end{itemize}
+\slideimage{texture_cubemap.png}
+\end{frame}
+
+\againframe<6->{types}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: размер}
+\begin{itemize}
+\item Текстура -- массив (1D/2D/3D) \textit{пикселей} оперделённого \textit{размера} в определённом \textit{формате}
+\pause
+\item Размер -- целочисленный трёхмерный вектор, все компоненты больше нуля
+\pause
+\item Для array текстур последняя компонента размера -- количество элементов (\textit{слоёв, layers}) в массиве
+\pause
+\item Для cubemap текстур последняя компонента размера -- 6
+\pause
+\item Для cubemap array текстур последняя компонента размера -- 6 умножить на количество слоёв
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: формат пикселей}
+\begin{itemize}
+\item Форматы пикселей похожи на форматы вершин:
+\begin{itemize}
+\item \mintinline{cpp}|R8Unorm| -- одна компонента в 1 байт, беззнаковый нормированный (\([0\dots 255]\) превращается в \([0.0\dots 1.0]\))
+\item \mintinline{cpp}|RG16Sint| -- две компоненты в 2 байта каждая, знаковый ненормированный (конверсия \mintinline{cpp}|int16| -> \mintinline{cpp}|float32|)
+\item \mintinline{cpp}|RGBA32Float| -- четыре компоненты в 4 байта каждая, floating-point (значения попадают в шейдер как есть)
+\item И т.п.
+\end{itemize}
+\pause
+\item Есть особые форматы:
+\begin{itemize}
+\item \mintinline{cpp}|RGB10A2Unorm| -- три компоненты по 10 бит, одна в 2 бита, беззнаковые нормированные
+\item \mintinline{cpp}|RG11B10Ufloat| -- две компоненты в 11-битном floating-point, одна в 10-битном
+\item \mintinline{cpp}|RGB9E5Ufloat| -- три компоненты: отдельные мантиссы по 9 бит, общая экспонента в 5 бит
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: формат пикселей}
+\begin{itemize}
+\item Есть форматы для буфера глубины / stencil:
+\begin{itemize}
+\item \mintinline{cpp}|Stencil8| -- только 8-битный stencil буфер
+\item \mintinline{cpp}|Depth16Unorm| -- 16-битный буфер глубины, беззнаковый нормированный
+\item \mintinline{cpp}|Depth24Plus| -- 24-битный буфер глубины (может быть нормированным или floating-point)
+\item \mintinline{cpp}|Depth24PlusStencil8| -- 24-битный буфер глубины + 8-битный stencil буфер
+\item \mintinline{cpp}|Depth32Float| -- 32-битный floating-point буфер глубины
+\item \mintinline{cpp}|Depth32FloatStencil8| -- 32-битный floating-point буфер глубины + 8-битный stencil буфер
+\item И т.п.
+\end{itemize}
+\pause
+\item Есть сжатые форматы: \mintinline{cpp}|BC*|, \mintinline{cpp}|ETC*|, \mintinline{cpp}|EACR*|, \mintinline{cpp}|ASTC*|
+\pause
+\item Есть sRGB-форматы: \mintinline{cpp}|RGBA8UnormSrgb|, и т.п.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: создание}
+\begin{itemize}
+\item При создании текстуры нужно указать
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|dimension| -- 1D/2D/3D
+\pause
+\item \mintinline{cpp}|size| -- размер массива пикселей (по трём осям)
+\pause
+\item \mintinline{cpp}|usage| -- как будет использоваться текстура (набор флагов, аналогично buffer usage)
+\pause
+\item ...и ещё несколько вещей, о которых узнаем позже :)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: usage}
+\begin{itemize}
+\item \mintinline{cpp}|CopySrc/CopyDst| -- будем копировать данные из текстуры / в текстуру
+\pause
+\item \mintinline{cpp}|TextureBinding| -- будем читать из шейдера как обычную текстуру (и добавлять в bind группы)
+\pause
+\item \mintinline{cpp}|StorageBinding| -- будем читать из шейдера как storage текстуру (и добавлять в bind группы)
+\pause
+\item \mintinline{cpp}|RenderAttachment| -- будем рисовать в текстуру с помощью растеризации
+\pause
+\item \mintinline{cpp}|TransientAttachment| -- render attachment, который не нужен после окончания render pass'а
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: views}
+\begin{itemize}
+\item Сама текстура -- только контейнер пикселей, чтобы её использовать в шейдере, нужно создать \textit{texture view}: \mintinline{cpp}|texture.create_view()|
+\pause
+\item Описывает, как \textit{интерпретировать} текстуру
+\pause
+\item Может читать 3D текстуру как 3D, 2D array, cubemap, или cubemap array
+\pause
+\item Может читать текстуру в другом формате (конвертировать из sRGB-форматов в обычные и наоборот)
+\pause
+\item Может читать только depth или stencil часть depth+stencil формата
+\pause
+\item Может читать конкретный диапазон слоёв array-текстуры или mipmap-уровней (о них позже)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: bind group}
+\begin{itemize}
+\item В bind group layout'е:
+\begin{itemize}
+\item \mintinline{cpp}|view_dimension| -- 1D / 2D / 2D array / cubemap / etc
+\item \mintinline{cpp}|sample_type| -- \mintinline{cpp}|Float| (для floating-point или нормированных текстур), \mintinline{cpp}|Sint| для знаковых целых, \mintinline{cpp}|Uint| для беззнаковых целых, \mintinline{cpp}|Depth| для глубины
+\end{itemize}
+\pause
+\item В bind группе:
+\begin{itemize}
+\item \mintinline{cpp}|texture_view|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: шейдер}
+\begin{itemize}
+\item В шейдере текстура представлена переменной с особым типом, соответствующим view dimension и sample type
+\end{itemize}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+// T = f32 / i32 / u32
+texture_1d<T>
+texture_2d<T>
+texture_2d_array<T>
+texture_3d<T>
+texture_cube<T>
+texture_cube_array<T>
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тестуры: чтение}
+\begin{itemize}
+\item \mintinline{wgsl}|textureLoad(texture, coords, [array_layer], level)| -- возвращает \mintinline{glsl}|vec4f/vec4i/vec4u| в зависимости от типа текстуры (даже если в текстуре на самом деле меньше компонент)
+\pause
+\item \mintinline{wgsl}|coords| -- целочисленные координаты пикселя
+\pause
+\item \mintinline{wgsl}|array_layer| -- номер слоя для array-текстур
+\pause
+\item \mintinline{wgsl}|level| -- номер mipmap-уровня (о них позже)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: чтение}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Текстура хранит набор дискретных пикселей
+\pause
+\item Вычислять координаты пикселя -- неудобно, нужно знать размер текстуры
+\pause
+\item Хочется обращаться по неким (проинтерполированным из вершинного шейдера) floating-point координатам
+\pause
+\item Хочется сглаживать (интерполировать) значения между пикселями
+\pause
+\item \begin{math}\Longrightarrow\end{math} режимы фильтрации текстур
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: фильтрация}
+\usemintedstyle{solarized-light}
+\begin{itemize}
+\item Режимы фильтрации:
+\begin{itemize}
+\item \mintinline{cpp}|Nearest| -- использовать ближайший к указанным координатам пиксель
+\item \mintinline{cpp}|Linear| -- использовать линейную/билинейную/трилинейную интерполяцию между соседними 2/4/8 пикселями (для 1D/2D/3D соответственно)
+\item \textbf{\alert{NB}}: Для array-текстур номер слоя \textit{всегда ближайший}!
+\end{itemize}
+\pause
+\item Настраиваются отдельно для случая, когда
+\begin{itemize}
+\item Пиксель текстуры больше пикселя на экране (magnification) -- \mintinline{cpp}|mag_filter|
+\item Пиксель текстуры меньше пикселя на экране (minification) -- \mintinline{cpp}|min_filter|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Nearest vs Linear}
+\slideimage{pikachu.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Nearest vs Linear}
+\slideimage{nearest_linear.png}
+\end{frame}
+
+\begin{frame}
+\frametitle{Minification vs Magnification}
+\slideimage{earth.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Mipmaps}
+\begin{itemize}
+\item Когда пиксель текстуры меньше пикселя на экране (minification), текстура выглядит плохо:
+\begin{itemize}
+\item \mintinline{cpp}|Nearest| -- часть пикселей текстуры не попадают на экран
+\pause
+\item \mintinline{cpp}|Linear| -- нормально до x2 уменьшения, потом пиксели тоже не попадают на экран
+\end{itemize}
+\pause
+\item Решение: \textit{mipmap-уровни}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Mipmaps}
+\begin{itemize}
+\item Mipmaps -- уменьшенные копии текстуры для использования при \textit{минификации}
+\pause
+\item Для 2D текстуры \begin{math}W\times H\end{math} первый уровень имеет размер \begin{math}\left\lfloor\frac{W}{2}\right\rfloor\times \left\lfloor\frac{H}{2}\right\rfloor\end{math}, второй уровень имеет размер \begin{math}\left\lfloor\frac{W}{4}\right\rfloor\times \left\lfloor\frac{H}{4}\right\rfloor\end{math}, и т.д.
+\pause
+\item Последний mipmap-уровень имеет размер \begin{math}1\times 1\end{math}
+\pause
+\item Для 1D или 3D текстур -- аналогично по всем осям
+\pause
+\item Для array-текстур -- отдельный набор mipmap'ов для каждого слоя
+\pause
+\item Для cubemap-текстур -- отдельный набор mipmap'ов для каждой грани
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Mipmaps}
+\slideimage{mipmaps.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Mipmaps}
+\begin{itemize}
+\item Количество mipmap-уровней указывается в поле \mintinline{cpp}|mip_level_count| при создании текстуры
+\pause
+\item Их пиксели нужно загрузить на GPU так же, как саму текстуру, либо сгенерировать уже на GPU (рендерингом или compute шейдерами)
+\pause
+\item Режимы фильтрации mipmap-уровней -- \mintinline{cpp}|mipmap_filter|:
+\begin{itemize}
+\item \mintinline{cpp}|Nearest| -- выбирается ближайший mipmap-уровень
+\pause
+\item \mintinline{cpp}|Linear| -- берутся пиксели с двух ближайших уровней и линейно интерполируются
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Би/трилинейная фильтрация}
+\begin{itemize}
+\item Размерность текстуры (1D/2D/3D) и тип фильтрации влияют на общее число линейных интерполяций, отсюда названия \textit{билинейная} фильтрация и \textit{трилинейная} фильтрация
+\pause
+\item Часто под трилинейной фильтрацией имеют в виду конкретно 2D текстуру с \mintinline{cpp}|min_filter = Linear| и \mintinline{cpp}|mipmap_filter = Linear|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Анизотропная фильтрация}
+\begin{itemize}
+\item Текстура после проецирования на экран может быть нормального размера по одной оси, и маленькая по другой
+\pause
+\item Большой mipmap уровень хорош для одной оси, маленький -- для другой; ни один уровен не будет выглядеть хорошо
+\pause
+\item Решение: \textit{анизотропная фильтрация} -- читать текстуру в нескольких местах сразу и усреднять (поддерживается аппаратно)
+\pause
+\item Включается настройкой \mintinline{cpp}|max_anisotropy| -- от 1 до 16 (количество чтений из текстуры, которые делает GPU)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Анизотропная фильтрация}
+\slideimage{anisotropy.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Wrapping mode}
+\begin{itemize}
+\item При чтении из текстуры координаты могут выходить за пределы диапазона
+\pause
+\item При \mintinline{cpp}|Linear|-фильтрации для точек у границы текстуры может не найтись достаточное количество соседних пикселей
+\pause
+\item \begin{math}\Longrightarrow\end{math} \mintinline{cpp}|address mode|:
+\begin{itemize}
+\item \mintinline{cpp}|ClampToEdge| -- брать пиксель с границы
+\item \mintinline{cpp}|ClampToBorder| -- брать пиксель фиксированного цвета
+\item \mintinline{cpp}|Repeat| -- повторять текстуру
+\item \mintinline{cpp}|MirrorRepeat| -- повторять текстуру, отражая её на каждый повтор
+\end{itemize}
+\pause
+\item Настраивается отдельно для каждой текстурной координаты (U, V, W)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Wrapping}
+\slideimage{wrapping.png}
+\end{frame}
+\begin{frame}
+\frametitle{Wrapping}
+\slideimage{wrapping2.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Samplers}
+\begin{itemize}
+\item Все настройки фильтрации и wrapping'а хранятся не в самой текстуре, а в отдельном объекте -- \textit{сэмплере}
+\pause
+\item \mintinline{cpp}|device.create_sampler({ addressModeU = Repeat, ... })|
+\pause
+\item Его тоже нужно добавлять в bind группы (и, соответственно, в layout'ы)
+\pause
+\item \textbf{\alert{NB}}: В некоторых API (OpenGL, Vulkan) можно объеденить текстуру и сэмплер в один объект для удобства
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: чтение}
+\begin{itemize}
+\item Процесс чтения текстуры с использованием сэмплера (и его настроек) называется \textit{сэмплингом} текстуры
+\pause
+\item Для сэмплинга есть отдельная функция: \mintinline{wgsl}|textureSample(texture, sampler, coords, array_layer)|
+\pause
+\item Здесь, \mintinline{wgsl}|coords| -- не номер пикселя, а \textit{текстурные координаты}:
+\pause
+\begin{itemize}
+\item Для 1D/2D/3D текстур \mintinline{wgsl}|float/vec2f/vec3f| -- \textit{нормированные} координаты, [0..1] по каждой оси
+\pause
+\item Для cubemap текстур \mintinline{wgsl}|vec3f| -- вектор направления из центра куба: возвращается значение из пересечения луча с поверхностью куба
+\pause
+\item Частое название в случае 2D текстур: \textit{UV-координаты}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстурные координаты}
+\begin{itemize}
+\item \mintinline{wgsl}|texture_2d|: \mintinline{wgsl}|vec2(0.6, 0.5)| -- пиксель чуть правее центра текстуры
+\pause
+\item \mintinline{wgsl}|texture_cube|: \mintinline{wgsl}|vec3(0.1, 1.0, -0.1)| -- пиксель на +Y грани куба, около центра грани
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Выбор mipmap уровня: shader derivatives}
+\begin{itemize}
+\item Как GPU понимает, какой выбрать mipmap-уровень, и происходит ли minification/magnification? \pause По значениям в \textit{соседних пикселях}
+\pause
+\item Фрагментный шейдер всегда запускается на группах 2x2 пикселя (даже если часть из них не были растеризованы)
+\pause
+\item В GLSL есть функции \mintinline{wgsl}|dpdx/dpdy| -- вычисляют разницу некой величины для пары соседних пикселей в группе 2x2
+\pause
+\begin{itemize}
+\item Например, \mintinline{wgsl}|dpdx(value)| -- разница между значением \mintinline{wgsl}|value| в пикселе справа и значением в пикселе слева
+\end{itemize}
+\pause
+\item По \mintinline{wgsl}|dpdx(coords)| и \mintinline{wgsl}|dpdy(coords)| вычисляется mipmap-уровень (где \mintinline{wgsl}|coords| -- текстурные координаты)
+\pause
+\item Интерпретируя \mintinline{wgsl}|dpdx/dpdy| как аппроксимации производных, можно делать много интересных трюков: восстанавливать нормаль к поверхности по z-буферу, рисовать линии фиксированной толщины даже с перспективной проекцией, и т.п.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: загрузка данных}
+\begin{itemize}
+\item \mintinline{cpp}|queue.write_texture(copy_info, data_layout, data, size)|
+\pause
+\item \mintinline{cpp}|data_layout| -- описывает, как организованы байты текстуры в памяти:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|bytes_per_row| -- количество байт на одну строку текстуры (может включать padding в конце строки)
+\pause
+\item \mintinline{cpp}|rows_per_image| -- количество строк на один 2D слой (имеет смысл для 3D текстур)
+\end{itemize}
+\pause
+\item \mintinline{cpp}|copy_info| -- описывает, куда нужно записать пиксели:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|texture| -- текстура, куда загружаем пиксели
+\pause
+\item \mintinline{cpp}|mip_level| -- в какой mipmap-уровень
+\pause
+\item \mintinline{cpp}|origin| -- координаты левого нижнего угла (можно загрузить часть текстуры в произвольном месте)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстуры: загрузка данных}
+\begin{itemize}
+\item \mintinline{cpp}|queue.copy_buffer_to_texture(...)| -- скоприровать данные из буфера в текстуру
+\pause
+\item Полезно для асинхронной загрузки текстур (через mapped buffer), для сжатия текстур на GPU
+\pause
+\item Для этой функции \mintinline{cpp}|bytes_per_row| должен быть кратен 256
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Как использовать текстуру для 3D-модели?}
+\begin{itemize}
+\item Обычно каждая вершина 3D-модели хранит нормированные 2D текстурные координаты (\textit{UV-развёртка})
+\pause
+\item Они передаются из вершинного шейдера во фрагментный и интерполируются
+\pause
+\item Интерполированные значения текстурных координат используются во фрагментном шейдере для сэмплинга текстуры
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Как использовать текстуру для 3D-модели?}
+\slideimage{uvs.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Форматы изображений}
+\begin{itemize}
+\item \mintinline{cpp}|queue.write_texture()| ожидает на вход массив готовых пикселей
+\pause
+\item Обычно изображения хранятся в более сложных форматах: PNG, JPG, и т.д.
+\pause
+\item Есть формат Netpbm, хранящий сырые пиксели и простой для чтения/записи
+\pause
+\item Есть библиотеки для чтения разных форматов -- libpng, libjpeg
+\pause
+\item \mintinline{cpp}|stb_image.h| -- single-header библиотека для чтения разных форматов
+\pause
+\item Boost GIL (Generic Image Library)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстура: полный код (инициализация)}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+texture = device.create_texture({
+  dimension: 2D,
+  size: [1024, 1024, 1],
+  usage: CopyDst | RenderAttachment,
+})
+
+queue.write_texture(...)
+
+sampler = device.create_sampler({
+  addressModeU: Repeat,
+  minFilter: Linear,
+  ...
+})
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстура: полный код (инициализация)}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+bind_group_layout = device.create_bind_group_layout([
+  {
+    binding: 0,
+    texture: { Float, 2D },
+  },
+  {
+    binding: 1,
+    sampler: { Filtering },
+  },
+])
+
+bind_group = device.create_bind_group(bind_group_layout, [
+  {
+    binding: 0,
+    texture_view: texture.create_view(),
+  },
+  {
+    binding: 1,
+    sampler: sampler,
+  },
+])
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстура: полный код (рендеринг)}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+render_pass.set_bind_group(0, bind_group)
+render_pass.set_pipeline(my_pipeline)
+render_pass.set_vertex_buffer(...)
+render_pass.set_index_buffer(...)
+render_pass.draw_indexed(...)
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Текстура: полный код (шейдер)}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@group(0) @binding(0) var color_texture: texture_2d<f32>;
+@group(0) @binding(1) var linear_sampler: sampler;
+
+struct VertexIn {
+  @location(0) position: vec3f,
+  @location(1) texcoord: vec2f,
+}
+
+struct VertexOut {
+  @builtin(position) clip_position: vec4f,
+  @location(0) texcoord: vec2f,
+}
+
+@vertex
+fn vertex_main(in: VertexIn) -> VertexOut {
+  return VertexOut(matrix * vec4f(in.position, 1.0), in.texcoord);
+}
+
+@fragment
+fn fragment_main(in: VertexOut) -> @location(0) vec4f {
+  return textureSample(color_texture, linear_sampler, in.texcoord);
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ссылки}
+\begin{itemize}
+\item \href{https://www.khronos.org/opengl/wiki/Texture}{\nolinkurl{khronos.org/opengl/wiki/Texture}}
+\item \href{https://www.khronos.org/opengl/wiki/Sampler_Object}{\nolinkurl{khronos.org/opengl/wiki/Sampler\_Object}}
+\item \href{https://www.khronos.org/opengl/wiki/Image_Format}{\nolinkurl{khronos.org/opengl/wiki/Image\_Format}}
+\item \href{https://learnopengl.com/Getting-started/Textures}{\nolinkurl{learnopengl.com/Getting-started/Textures}}
+\item \href{http://www.opengl-tutorial.org/beginners-tutorials/tutorial-5-a-textured-cube}{\nolinkurl{opengl-tutorial.org/beginners-tutorials/tutorial-5-a-textured-cube}}
+\item \href{https://open.gl/textures}{\nolinkurl{open.gl/textures}}
+\end{itemize}
+\end{frame}
+
+\end{document}
