@@ -87,10 +87,13 @@
 \item Шейдер Солнца просто выводит цвета как есть, а шейдер планет использует освещение по формуле
 \usemintedstyle{lightbulb}
 \begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
-// world_position - позиция в 3D пространстве
-// считаем, что Солнце находится в начале координат
-color * max(0.0, dot(normal, -normalize(world_position)))
+// Здесь position - позиция в 3D пространстве
+// Считаем, что Солнце находится в начале координат
+// ambient - что-нибудь в духе 0.01..0.1
+color * (ambient + max(0.0, dot(normal, -normalize(position))))
 \end{tcblisting}
+\usemintedstyle{tango}
+\item Матрицу \mintinline{cpp}|model| нужно применять к вектору нормали
 \item Цвета Солнца как-нибудь анимируются на CPU и каждый кадр загружаются на GPU
 \end{itemize}
 \end{frame}
@@ -130,7 +133,7 @@ color * max(0.0, dot(normal, -normalize(world_position)))
 \begin{frame}[fragile,label=sun_planets]
 \frametitle{Свечение солнца}
 \begin{itemize}
-\item Для свечения Солнца можно использовать ту же 3D модель кольца, но заставить её повернуться в сторону Солнца
+\item Для свечения Солнца можно использовать ту же 3D модель кольца, но заставить её повернуться в сторону камеры
 \item Например, взять направление из Солнца на камеру за ось Y, взять любые две перпендикулярных ей и друг другу оси X и Z, и построить из них матрицу поворота
 \item Для динамического свечения можно тоже динамически обновлять буфер с цветами
 \end{itemize}
