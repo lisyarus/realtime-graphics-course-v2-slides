@@ -113,7 +113,7 @@
 \frametitle{Задание 4}
 Загружаем текстуру
 \begin{itemize}
-\item Создаём текстуру: \mintinline{cpp}|device.create_texture()|, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|format = RGBA8|, \mintinline{cpp}{usage = CopyDst | TextureBinding}, размер взять из \mintinline{cpp}|cow_image|
+\item Создаём текстуру: \mintinline{cpp}|device.create_texture()|, \mintinline{cpp}|dimension = 2D|, \mintinline{cpp}|format = RGBA8Unorm|, \mintinline{cpp}{usage = CopyDst | TextureBinding}, размер взять из \mintinline{cpp}|cow_image|
 \item Загружаем пиксели в нашу текстуру: \mintinline{cpp}|queue.write_texture()|, \mintinline{cpp}|aspect = All|, \mintinline{cpp}|bytes_per_row = cow_image.width * 4|, \mintinline{cpp}|rows_per_image = cow_image.height|
 \item Создаём texture view (дескриптор можно оставить пустым -- все дефолтные настройки нам подойдут)
 \item \textbf{\alert{NB}}: Картинка не изменится, мы никак не используем текстуру :)
