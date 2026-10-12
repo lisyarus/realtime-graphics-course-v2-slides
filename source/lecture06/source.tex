@@ -1,0 +1,818 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usepackage{amsmath}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations}
+\usetikzlibrary{decorations.pathreplacing}
+\usepackage{xifthen}
+
+\usetheme{metropolis}
+\setminted{fontsize=\footnotesize}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{magenta}{rgb}{0.75,0,0.75}
+\definecolor{codebg}{RGB}{29,35,49}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\usemintedstyle{tango}
+
+\title{Компьютерная графика}
+\subtitle{Лекция 6: blending, stencil buffer, render to texture, пост-обработка}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}<1-3>[fragile,label=blending]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item По умолчанию результат фрагментного шейдера (\mintinline{wgsl}|@location(0) vec4f|) записывается в пиксель экрана, стирая то, что было в нём до этого
+\pause
+\item Иногда мы хотим `смешать' результат и пиксель экрана, и записать результат смешивания:
+\pause
+\begin{itemize}
+\item Полупрозрачные объекты
+\pause
+\item Растительность
+\pause
+\item Алгоритмы освещения и теней
+\pause
+\item Heatmaps
+\pause
+\item Ручное сглаживание
+\pause
+\item И т.д.
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Полупрозрачность}
+\begin{figure}
+\slideimage{window.png}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Полупрозрачность}
+\begin{figure}
+\slideimage{macos-ui.png}
+\end{figure}
+\end{frame}
+
+\againframe<3-4>{blending}
+
+\begin{frame}
+\frametitle{Деревья}
+\begin{figure}
+\slideimage{birch.png}
+\end{figure}
+\end{frame}
+
+\againframe<4-6>{blending}
+
+\begin{frame}
+\frametitle{Heatmap}
+\begin{figure}
+\slideimage{heatmap.jpg}
+\end{figure}
+\end{frame}
+
+\againframe<6-7>{blending}
+
+\begin{frame}
+\frametitle{Yandex maps}
+\begin{figure}
+\slideimage{yandex-maps.png}
+\end{figure}
+\end{frame}
+
+\againframe<7->{blending}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Настраивается в \mintinline{cpp}|color_target_state.blend| в \mintinline{cpp}|render_pipeline_descriptor.fragment.targets|
+\pause
+\item Уравнение blending'а:
+\begin{center}
+\begin{math}
+dst \leftarrow f(C_{src} \cdot src, C_{dst} \cdot dst)
+\end{math}
+\end{center}
+\pause
+\begin{itemize}
+\item \begin{math}src\end{math} -- результат фрагментного шейдера
+\pause
+\item \begin{math}dst\end{math} -- пиксель на экране
+\pause
+\item \begin{math}f\end{math} -- настраиваемая функция
+\pause
+\item \begin{math}C_{src}\end{math} и \begin{math}C_{dst}\end{math} -- настраиваемые веса
+\pause
+\item Настраивается отдельно для \(RGB\) и для \(A\) компонент
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Настройка функции \begin{math}f\end{math}: \textit{blend operation}:
+\[
+\begin{aligned}
+&\text{\textbullet\ \mintinline{cpp}|Add|} \quad && f(src, dst) = src + dst \\
+&\text{\textbullet\ \mintinline{cpp}|Subtract|} \quad && f(src, dst) = src - dst \\
+&\text{\textbullet\ \mintinline{cpp}|ReverseSubtract|} \quad && f(src, dst) = dst - src \\
+&\text{\textbullet\ \mintinline{cpp}|Min|} \quad && f(src, dst) = min(src, dst) \\
+&\text{\textbullet\ \mintinline{cpp}|Max|} \quad && f(src, dst) = max(src, dst) \\
+\end{aligned}
+\]
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Настройка весов \begin{math}C_{src}\end{math} и \begin{math}C_{dst}\end{math}: \textit{blend factor}
+\begin{itemize}
+\item \mintinline{cpp}|Zero|: \begin{math}C = 0\end{math}
+\item \mintinline{cpp}|One|: \begin{math}C = 1\end{math}
+\item \mintinline{cpp}|Src|: \begin{math}C = src\end{math} (покомпонентно)
+\item \mintinline{cpp}|OneMinusSrc|: \begin{math}C = 1 - src\end{math} (покомпонентно)
+\item \mintinline{cpp}|srcAlpha|: \begin{math}C = src_A\end{math}
+\item \mintinline{cpp}|OneMinusSrcAlpha|: \begin{math}C = 1 - src_A\end{math}
+\item И т.д.
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Обычно \begin{math}src=(R,G,B,A)\end{math} означает, что цвет имеет полупрозрачность (точнее -- \textit{непрозрачность}, или \textit{opacity}) равную \begin{math}A\end{math}
+\begin{itemize}
+\item \begin{math}A=0\end{math} -- полностью прозрачный цвет
+\item \begin{math}A=1\end{math} -- полностью непрозрачный цвет
+\end{itemize}
+\pause
+\item Для этого нужна такая формула смешивания:
+\begin{center}
+\begin{math}
+dst \leftarrow src_A \cdot src + (1 - src_A) \cdot dst = \operatorname{lerp}(dst, src, src_A)
+\end{math}
+\end{center}
+\pause
+\item Этому соответстует настройка
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+BlendComponent {
+  operation: Add,
+  src_factor: SrcAlpha,
+  dst_factor: OneMinusSrcAlpha,
+}
+\end{tcblisting}
+\pause
+\item Это \textit{один из самых типичных} способов использовать blending (но не самый правильный)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Такое смешивание некоммутативно, т.е. результат зависит от порядка рисования
+\item Бывают конкретные ситуации, когда коммутативность не нарушается (наложение двух объектов с \mintinline{cpp}|A = 0.5| или наложение нескольких объектов одинакового цвета)
+\end{itemize}
+\slideimage{two-squares.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Смешивание некорректно работает с тестом глубины
+\end{itemize}
+\slideimage{blending_incorrect_order.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item В общем случае нужно сортировать полупрозрачные объекты и рисовать в порядке уменьшения расстояния до камеры
+\pause
+\begin{itemize}
+\item Что именно считать расстоянием до камеры (расстояние от центра объекта / от ближайшей вершины / от самой далёкой вершины / среднее между минимальным и максимальным расстоянием) -- большой вопрос
+\pause
+\item Для любого варианта можно найти примеры, ломающие его (цикл между объектами, накрывающими друг друга)
+\end{itemize}
+\pause
+\item Order-independent transparency (OIT) -- активная тема исследований
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Сортировка по расстоянию до камеры
+\end{itemize}
+\slideimage{blending_sorted.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Случай, когда сортировка не поможет
+\end{itemize}
+\slideimage{painters.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Аддитивное смешивание}
+\begin{itemize}
+\item Один часто используемый вариант смешивания -- аддитивное смешивание
+\item \begin{math}dst \leftarrow src + dst\end{math} или \begin{math}dst \leftarrow src_A \cdot src + dst\end{math}
+\pause
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+BlendComponent {
+  operation: Add,
+  src_factor: SrcAlpha, // или One
+  dst_factor: One,
+}
+\end{tcblisting}
+\pause
+\item Такое смешивание коммутативно \begin{math}\Longrightarrow\end{math} не важно, в каком порядке рисовать объекты
+\pause
+\item Heatmaps, облака точек
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Аддитивное смешивание}
+\begin{figure}
+\slideimage{heatmap.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}
+\frametitle{Аддитивное смешивание}
+\begin{figure}
+\slideimage{galaxy.jpg}
+\end{figure}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Формула \begin{math}
+dst \leftarrow src_A \cdot src + (1 - src_A) \cdot dst
+\end{math} работает только если destination -- непрозрачный цвет
+\pause
+\item Если мы хотим наложить несколько полупрозрачных объектов, и получить суммарную полупрозрачную картинку, нужна более сложная формула
+\pause
+\item Пусть есть цвет \begin{math}C_0\end{math}, на который накладывается цвет \begin{math}C_1\end{math} с opacity \begin{math}a_1\end{math}, а потом \begin{math}C_2\end{math} с opacity \begin{math}a_2\end{math}: получится цвет
+\pause
+\begin{equation*}
+C_2a_2 + C_1a_1(1-a_2) + C_0(1-a_1)(1-a_2)
+\end{equation*}
+\pause
+\item Мы хотим привести это к виду \begin{math}C'a' + C_0(1-a')\end{math}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item Мы хотим привести это к виду \begin{math}C'a' + C_0(1-a')\end{math}
+\pause
+\item Отсюда
+\begin{equation*}
+\begin{matrix}
+a' = 1-(1-a_1)(1-a_2) = a_1+a_2-a_1a_2=a_2+a_1(1-a_2) \\
+\\
+C' = \frac{C_2a_2+C_1a_1(1-a_2)}{a_2+a_1(1-a_2)}
+\end{matrix}
+\end{equation*}
+\pause
+\item Это т.н. \textit{over operator} смешивания (см. \href{https://graphics.pixar.com/library/Compositing/paper.pdf}{Porter, Duff'84})
+\pause
+\item Такую функцию \textbf{не выразить} через стандартный блендинг: он не умеет разделить результирующий цвет на его альфа-канал
+\pause
+\item \begin{math}\Longrightarrow\end{math} Решение: \textit{премультиплицированный} альфа-канал
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Premultiplied alpha}
+\begin{itemize}
+\item Идея: давайте хранить цвета не в виде \begin{math}(R,G,B,A)\end{math}, а в виде \begin{math}(R\cdot A, G\cdot A, B\cdot A, A)\end{math}
+\pause
+\item Тогда формула blending'а заменится на
+\begin{equation*}
+\begin{matrix}
+a' = a_2+a_1(1-a_2) \\
+\\
+C'\cdot a' = (C_2\cdot a_2)+(C_1\cdot a_1)(1-a_2)
+\end{matrix}
+\end{equation*}
+\pause
+\item \begin{math}\Longrightarrow\end{math} Если и входные, и выходные цвета премультиплицированные, то правильный blending \textbf{можно} выразить встроенными операциями: 
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=rust, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+BlendComponent {
+  operation: Add,
+  src_factor: One,
+  dst_factor: OneMinusSrcAlpha,
+}
+\end{tcblisting}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Premultiplied alpha: mipmaps}
+\begin{itemize}
+\item При обычной генерации mipmaps для полупрозрачных изображений есть проблема: очень прозрачные или полностью прозрачные пиксели дают такой же вклад в результат, как и непрозрачные
+\pause
+\item Пример: три чёрных прозрачных пикселя \begin{math}(R,G,B,A)=(0,0,0,0)\end{math} усредняются с одним красным непрозрачным \begin{math}(R,G,B,A)=(1,0,0,1)\end{math}, и получается тёмно-красный пиксель с opacity 25\%: \begin{math}(0.25,0,0,0.25)\end{math}
+\pause
+\item Значение opacity верное, но значение цвета -- нет: пиксель должен был остаться красным
+\pause
+\item Если хранить пиксели текстуры в премультиплицированном виде, проблема отпадает: цвета автоматически усредняются пропорционально значениям альфа-канала:
+\begin{equation*}
+\begin{matrix}
+a' = \frac{1}{4}(a_0+a_1+a_2+a_3) \\
+\\
+C'\cdot a' = \frac{1}{4}(C_0\cdot a_0+C_1\cdot a_1+C_2\cdot a_2+C_3\cdot a_3)
+\end{matrix}
+\end{equation*}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Premultiplied alpha}
+\begin{itemize}
+\item У такого способа хранения текстур есть минус: значения цветовых каналов ограничены значением альфа-канала, и теряется их точность
+\pause
+\item Обычно это не проблема: если пиксель сильно прозрачный, то слабая точность его цвета всё равно слабо заметна
+\pause
+\item В общем случае, если вы делаете хоть что-то нетривиальное с полупрозрачностью, лучше \textbf{сразу использовать} премультиплицированные цвета
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Blending (смешивание)}
+\begin{itemize}
+\item \href{https://www.khronos.org/opengl/wiki/Blending}{\texttt{khronos.org/opengl/wiki/Blending}}
+\item \href{http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-10-transparency/}{\texttt{opengl-tutorial.org/intermediate-tutorials/tutorial-10-transparency}}
+\item \href{https://learnopengl.com/Advanced-OpenGL/Blending}{\texttt{learnopengl.com/Advanced-OpenGL/Blending}}
+\item \href{https://graphics.pixar.com/library/Compositing/paper.pdf}{\texttt{Porter, Duff - Compositing Digital Images}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil buffer (буфер трафарета)}
+\begin{itemize}
+\item Особый буфер, хранящий произвольные данные (почти всегда unsigned 8-bit на каждый пиксель), с особыми побитовыми операциями над ними
+\pause
+\item Чем-то аналогичен буферу глубины: тоже хранит какие-то данные, такого же размера (как и цветовой буфер), тоже позволяет рисовать или не рисовать пиксель по какому-то условию (stencil test -- происходит \textit{перед} depth test'ом)
+\pause
+\item Может быть отдельной текстурой в формате \mintinline{cpp}|Stencil8|, либо храниться вместе с буфером глубины в формате \mintinline{cpp}|Depth24PlusStencil8| или \mintinline{cpp}|Depth32FloatStencil8|
+\pause
+\item Подключается к render\_pass'у так же, как буфер глубины -- через \mintinline{cpp}|render_pass_descriptor.depth_stencil_attachment|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil тест}
+\begin{itemize}
+\item Stencil test настраивается в \mintinline{cpp}|render_pipeline_descriptor.depth_stencil.stencil|
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|read_mask|, \mintinline{cpp}|write_mask| -- побитовые маски, которые будут применены к значениям в stencil buffer'е при его чтении/записи
+\pause
+\item \mintinline{cpp}|front|, \mintinline{cpp}|back| -- поведение stencil test'а для front-facing и back-facing граней
+\end{itemize}
+\pause
+\item Сам stencil test имеет вид \(f(stencil, ref)\), где
+\begin{itemize}
+\item \(stencil\) -- текущее значение в stencil буфере
+\pause
+\item \(ref\) -- значение, выставляемое через \mintinline{cpp}|render_pass.set_stencil_reference()|
+\pause
+\item \(f\) -- настраиваемая функция
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil тест}
+\begin{itemize}
+\item Настройка функции для stencil test'а: \mintinline{cpp}|stencil.{front/back}.compare| -- те же функции, что и для теста глубины: \mintinline{cpp}|Always|, \mintinline{cpp}|Less|, и т.п.
+\pause
+\item Если stencil test не прошёл, пиксель не нарисуется
+\pause
+\item Настройка того, что произойдёт со значениями в stencil буфере -- \textit{stencil operation}:
+\begin{itemize}
+\item \mintinline{cpp}|fail_op| -- если не прошёл stencil тест
+\item \mintinline{cpp}|depth_fail_op| -- если прошёл stencil тест, но не прошёл depth тест
+\item \mintinline{cpp}|pass_op| -- если прошли оба теста
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil тест}
+\begin{itemize}
+\item Возможные значения \textit{stencil operation}:
+\begin{itemize}
+\item \mintinline{cpp}|Keep|
+\item \mintinline{cpp}|Zero|
+\item \mintinline{cpp}|Replace|
+\item \mintinline{cpp}|Invert|
+\item \mintinline{cpp}|IncrementClamp|
+\item \mintinline{cpp}|DecrementClamp|
+\item \mintinline{cpp}|IncrementWrap|
+\item \mintinline{cpp}|DecrementWrap|
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil тест}
+\slideimage{stencil-example-1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil тест}
+\slideimage{stencil-example-2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil тест}
+\slideimage{stencil-example-3.png}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=stencil_examples]
+\frametitle{Stencil буфер: применение}
+\begin{itemize}
+\item Некоторые алгоритмы рисования теней (stencil shadows / shadow volumes)
+\pause
+\item Любая ситуация, в которой нужно ограничить рисование определённых пикселей:
+\pause
+\begin{itemize}
+\item Симулятор самолёта: сначала рисуется внутренность самолёта, затем -- окружающий мир, только там, где не был нарисован самолёт \begin{math}\Longrightarrow\end{math} можно избежать проблем с точностью буфера глубины
+\pause
+\item UI, который нужно нарисовать в какой-то ограниченной области экрана (например, scroll)
+\pause
+\item Рисование невыпуклых полигонов (odd-even rule)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes (stencil shadows)}
+\slideimage{shadow-volumes.jpeg}
+\end{frame}
+
+\againframe<1-3>{stencil_examples}
+
+\begin{frame}[fragile]
+\frametitle{Microsoft flight simulator}
+\slideimage{flight-simulator.jpg}
+\end{frame}
+
+\againframe<3-4>{stencil_examples}
+
+\begin{frame}[fragile]
+\frametitle{Unity Scroll View}
+\slideimage{scroll-view.png}
+\end{frame}
+
+\againframe<4-5>{stencil_examples}
+
+\begin{frame}[fragile]
+\frametitle{Невыпуклый полигон}
+\slideimage{non-convex-polygon.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Stencil буфер: ссылки}
+\begin{itemize}
+\item \href{https://www.khronos.org/opengl/wiki/Stencil_Test}{\texttt{khronos.org/opengl/wiki/Stencil\_Test}}
+\item \href{https://learnopengl.com/Advanced-OpenGL/Stencil-testing}{\texttt{learnopengl.com/Advanced-OpenGL/Stencil-testing}}
+\item \href{https://open.gl/depthstencils}{\texttt{open.gl/depthstencils}}
+\item \href{https://en.wikibooks.org/wiki/OpenGL_Programming/Stencil_buffer}{\nolinkurl{en.wikibooks.org/wiki/OpenGL_Programming/Stencil_buffer}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Render to texture}
+\begin{itemize}
+\item При описании render pass'а мы указываем, куда (в какой texture view) этот render pass будет рисовать
+\pause
+\item До этого мы передавали в него texture view, полученный из surface texture, чтобы рисовать на экран
+\pause
+\item Туда можно передать и любой другой texture view, полученный из любой текстуры
+\pause
+\item Приём рендеринга в текстуру для дальнейшего её использования называется \textit{render to texture}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Render to texture}
+\begin{itemize}
+\item \mintinline{cpp}|render_pass.color_attachment| содержит массив attachment'ов, каждый из которых ссылается на конкретную texture view
+\pause
+\item Этому массиву соответствуют индексы в \mintinline{wgsl}|@location(0)| возвращаемого значения фрагментного шейдера
+\pause
+\item Текстуры, в которую совершается рендеринг, должны быть созданы с флагом \mintinline{cpp}|RenderAttachment|
+\pause
+\item Все attachment'ы должны быть одного размера
+\pause
+\item Каждому attachment'у можно настроить своё поведение в начале и конце render pass'а
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Color attachment: load \& store}
+\begin{itemize}
+\item \mintinline{cpp}|attachment.ops.load| настраивает поведение \textbf{при старте} render pass'а:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|Clear|: очистить фиксированным цветом (свой цвет для каждого attachment'а)
+\item \mintinline{cpp}|Load|: загрузить содержимое attachment'а (т.е. соответствующей текстуры)
+\item \mintinline{cpp}|DontCare|: нам не важно содержимое на начало render pass'а (скорее всего, мы перерисуем все пиксели сами)
+\end{itemize}
+\pause
+\item \mintinline{cpp}|attachment.ops.store| настраивает поведение \textbf{в конце} render pass'а:
+\pause
+\begin{itemize}
+\item \mintinline{cpp}|Store|: сохранить результат рендеринга в attachment (т.е. в соответствующую текстуру)
+\item \mintinline{cpp}|Discard|: нам не нужно содержимое attachment'а после этого render pass'а
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Transient attachment}
+\begin{itemize}
+\item Есть особая архитектура GPU, применяющаяся в мобильных устройствах (Arm Mali, Qualcomm Adreno, PowerVR) или некоторых ноутбуках (Apple Silicon): \textit{тайловые (tile-based) GPU}
+\pause
+\item Они делят весь экран на \textit{тайлы} (например, 16x16 пикселей), запоминают список треугольников попавших в каждый тайл, и затем растеризуют каждый тайл по-отдельности в быструю локальную (\textit{on-chip}) память
+\pause
+\item Это может быть медленнее, чем типичная растеризация на десктопной GPU, но расходует меньше электричества
+\pause
+\item Текстура, созданная с флагом \mintinline{cpp}|TransientAttachment| и использующая \mintinline{cpp}|load = Clear/DontCare| и \mintinline{cpp}|store = Discard| может быть оптимизирована на таких GPU: её можно вообще не хранить в видеопамяти, только on-chip
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Render to texture}
+\begin{itemize}
+\item В качестве attachment'а можно указать конкретный слой 2D array текстуры, или конкретную грань cubemap текстуры: для этого нужно указать \mintinline{cpp}|base_array_layer| при создании texture view
+\pause
+\item В качестве attachment'а можно указать срез 3D текстуры с фиксированным значением координаты Z: для этого нужно указать \mintinline{cpp}|depth_slice| в самом color attachment'е
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Render to texture: форматы}
+\begin{itemize}
+\item Форматы пикселей, в которые можно совершать рендеринг, называются \textit{renderable formats}
+\pause
+\item Не все форматы являются \textit{renderable}; гарантируется поддержка
+\pause
+\begin{itemize}
+\item 8-битных нормированных (напр. \mintinline{cpp}|RGBA8Unorm|)
+\item 16-битных и 32-битных floating-point (напр. \mintinline{cpp}|RG16Float|)
+\item Всех целочисленных форматов (напр. \mintinline{cpp}|RG32Uint|)
+\item 10-10-10-2 форматов (\mintinline{cpp}|RGB10A2Unorm|, \mintinline{cpp}|RGB10A2Uint|)
+\end{itemize}
+\pause
+\item Другие форматы тоже могут поддерживаться, это нужно запрашивать в \mintinline{cpp}|required_features| при создании \mintinline{cpp}|Device|
+\pause
+\begin{itemize}
+\item Например, \mintinline{cpp}|RG11B10Float| полезен для HDR-рендеринга
+\end{itemize}
+\pause
+\item Формат может быть renderable но не поддерживать blending (например, целочисленные форматы)
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1-2>[fragile,label=fb_examples]
+\frametitle{Примеры использования render to texture}
+\begin{itemize}
+\item Пост-обработка кадра -- реализуется рисованием кадра в текстуру, и затем рисованием полноэкранного прямоугольника на экран с нужным шейдером, читающим эту текстуру
+\pause
+\begin{itemize}
+\item Размытие
+\pause
+\item Свечение (bloom)
+\pause
+\item Toon shading (edge detection, color grading)
+\pause
+\item HDR, гамма-коррекция
+\pause
+\item Сглаживание (FXAA)
+\pause
+\item И т.д.
+\end{itemize}
+\pause
+\item Тени (shadow maps)
+\pause
+\item Отражения
+\pause
+\item Deferred shading
+\pause
+\item И очень много другого
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Размытие}
+\slideimage{blur.png}
+\end{frame}
+
+\againframe<2-3>{fb_examples}
+
+\begin{frame}[fragile]
+\frametitle{Свечение}
+\slideimage{bloom.png}
+\end{frame}
+
+\againframe<3-4>{fb_examples}
+
+\begin{frame}[fragile]
+\frametitle{Toon shading}
+\slideimage{toon-shading.jpg}
+\end{frame}
+
+\againframe<4-6>{fb_examples}
+
+\begin{frame}[fragile]
+\frametitle{FXAA}
+\slideimage{fxaa.jpg}
+\end{frame}
+
+\againframe<6-8>{fb_examples}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping}
+\slideimage{shadow-maps.png}
+\end{frame}
+
+\againframe<8->{fb_examples}
+
+\begin{frame}[fragile]
+\frametitle{Размытие}
+\begin{itemize}
+\item Усреднение значений соседних пикселей в некоторой окрестности
+\pause
+\item Box blur: все веса одинаковые, получается угловатым
+\pause
+\item Gaussian blur: веса пропорциональны гауссиане \begin{math}\exp\left(-\frac{x^2+y^2}{2\sigma^2}\right)\end{math}, получается равномерное сглаживание
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Размытие}
+\begin{itemize}
+\item Несколько итераций box blur похожи на один gaussian blur (центральная предельная теорема)
+\pause
+\item Обычно gaussian blur делают в два прохода: один размывает по горизонтали, второй -- по вертикали (\textit{separable blur})
+\pause
+\item Можно использовать linear filtering и подбирать координаты sampling'а текстуры так, чтобы он автоматически давал правильные коэффициенты размытия
+\pause
+\item Можно комбинировать размытие с уменьшением/увеличением (\textit{downsampling/upsampling}) изображения
+\pause
+\item Самые эффективные современные алгоритмы комбинируют все эти идеи (см. \textit{Dual Kawase Blur})
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Box blur}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@group(0) @location(0) input_texture: texture_2d<f32>;
+@group(0) @location(1) nearest_sampler: sampler;
+
+@fragment
+fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
+    const N = 5;
+    var sum = vec4f(0.0);
+    let size = vec2f(textureDimensions(input_texture, 0));
+
+    for (var x = -N; x <= N; x += 1) {
+        for (var y = -N; y <= N; y += 1) {
+            let offset = vec2f(vec2i(x, y));
+            sum += textureSampleLevel(input_texture, nearest_sampler,
+              in.texcoord + offset / size, 0);
+        }
+    }
+
+    return sum / f32((2 * N + 1) * (2 * N + 1));
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Gaussian blur}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@fragment
+fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
+    const N = 5;
+    const sigma = 2.0;
+    var sum = vec4f(0.0);
+    var sum_weights = 0.0;
+    let size = vec2f(textureDimensions(input_texture, 0));
+
+    for (var x = -N; x <= N; x += 1) {
+        for (var y = -N; y <= N; y += 1) {
+            let offset = vec2f(vec2i(x, y));
+            let weight = exp(- dot(offset, offset)
+              / 2.0 / (sigma * sigma));
+            sum += textureSampleLevel(input_texture, nearest_sampler,
+              in.texcoord + offset / size, 0) * weight;
+            sum_weights += weight;
+        }
+    }
+
+    return sum / sum_weights;
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Bloom}
+\slideimage{bloom-diagram.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Toon shading (cel shading)}
+\begin{itemize}
+\item Edge detection + color grading
+\pause
+\item Edge detection: шейдер находит и выделяет резкие перепады цвета или глубины (используя, например, \textit{Sobel filter})
+\pause
+\item Color grading: палитра цветов искусственно уменьшается (например, сжимается до 2-3 бит на канал)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Color grading}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@fragment
+fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
+    let input = textureSampleLevel(input_texture, nearest_sampler,
+      in.texcoord, 0);
+
+    return floor(input * 4.0) / 3.0;
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Ссылки}
+\begin{itemize}
+\item \href{https://learnopengl.com/Advanced-Lighting/Bloom}{\nolinkurl{learnopengl.com/Advanced-Lighting/Bloom}}
+\item \href{https://www.youtube.com/watch?v=uZlwbWqQKpc}{\texttt{Gaussian blur (youtube video tutorial)}}
+\item \href{https://www.youtube.com/watch?v=YJVYX8tllj4}{\texttt{How to blur images at 20000 FPS (or 50 microseconds)}}
+\end{itemize}
+\end{frame}
+
+\end{document}
