@@ -1,0 +1,194 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 6: render to texture}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Практика 6}
+\begin{itemize}
+\item Модель можно двигать и вращать стрелками
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Практика 6}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Создаём sampler, offscreen текстуру, view, и bind группу
+\begin{itemize}
+\item Параметры sampler'а: \mintinline{cpp}|address_mode = ClampToEdge|, \mintinline{cpp}|*_filter = Linear|
+\item Формат текстуры -- \mintinline{cpp}|RGBA8Unorm|, размер -- \(\frac{width}{2}\times\frac{height}{2}\)
+\item Bind группа использует уже имеющийся в коде \mintinline{cpp}|bindGroupLayout|, в ней 2 entry: sampler и texture view
+\item Текстуру, view и bind группу нужно пересоздавать при изменении размеров экрана (так же, как буфер глубины)
+\item \textbf{\alert{NB}}: Пока ничего не изменится, мы никак не используем эту текстуру :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Рисуем созданную текстуру
+\begin{itemize}
+\item \textbf{После первого render pass'а} создаём второй, тоже рисующий на экран, но \textbf{без буфера глубины}; \mintinline{cpp}|loadOp = Load|, \mintinline{cpp}|storeOp = Store|
+\item Выставляем созданную bind группу под индексом 0: \mintinline{cpp}|render_pass.set_bind_group(0, bind_group)|
+\item В коде уже есть \mintinline{cpp}|texturePipeline| -- выставляем ей \mintinline{cpp}|TextureImmediates| и рисуем \mintinline{cpp}|render_pass.draw(vertex_count = 6)|, чтобы в левой нижней четверти экрана появился прямоугольник
+\item \textbf{\alert{NB}}: Текстура будет чёрной -- мы пока ничего в неё не рисовали
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Рисуем в нашу текстуру
+\begin{itemize}
+\item Изменяем настройку \textbf{первого render pass'а}, чтобы он рисовал в нашу текстуру
+\item Придётся изменить формат пикселя при создании \mintinline{cpp}|mainRenderPipeline|
+\item Придётся изменить размер буфера глубины (до совпадающего с размером текстуры)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Создаём array-текстуру
+\begin{itemize}
+\item При создании нашей текстуры указываем размер по третьей координате равный \mintinline{cpp}|Z = 4|
+\item Меняем одну texture view и одну bind группу на массивы из 4х текстур и bind групп, соответственно
+\item Texture view с номером \(k\) будет ссылаться на \mintinline{cpp}|k|-ый слой array текстуры, для этого при её создании нужно указать \mintinline{cpp}|base_array_layer = k|
+\item \mintinline{cpp}|k|-ая bind группа ссылается на \mintinline{cpp}|k|-ый texture view
+\item Для рендеринга пока используем \mintinline{cpp}|0|-ую bind группу и \mintinline{cpp}|0|-ой texture view
+\item \textbf{\alert{NB}}: Пока ничего не изменится, мы никак не используем оставшиеся 3 слоя
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Рисуем модель 4 раза в разные слои текстуры
+\begin{itemize}
+\item Заносим \textbf{первый render pass} в цикл: \mintinline{cpp}|k|-ая итерация рисует в \mintinline{cpp}|k|-ый слой текстуры (т.е. в \mintinline{cpp}|k|-ый texture view)
+\item У каждой итерации делаем свой цвет очистки и свою матрицу проекции (одна перспективная, три ортографических с разных сторон)
+\item Заносим рисование прямоугольника с текстурой на экран в цикл: \mintinline{cpp}|k|-ая итерация рисует \mintinline{cpp}|k|-ый слой (т.е. использует \mintinline{cpp}|k|-ую bind группу)
+\item Прямоугольники должны вместе покрыть экран
+\item \textbf{\alert{NB}}: В сумме должно получиться \textbf{5 render pass'ов}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\slideimage{5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Добавляем color grading
+\begin{itemize}
+\item Добавляем в \mintinline{cpp}|TextureImmediates| поле \mintinline{cpp}|mode: i32| и устанавливаем его в номер текущей итерации
+\item В шейдере \mintinline{cpp}|shader_texture.wgsl| при \mintinline{cpp}|mode == 1| делаем color grading: преобразуем выходной цвет как
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+color = floor(color * 4.0) / 3.0;
+\end{tcblisting}
+\usemintedstyle{tango}
+\item В противном случае возвращаем цвет без изменений
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\slideimage{6.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7}
+Добавляем domain warping
+\begin{itemize}
+\item Добавляем в \mintinline{cpp}|TextureImmediates| поле \mintinline{cpp}|time: f32| и передаём туда время (оно уже есть в заготовке)
+\item В шейдере \mintinline{cpp}|shader_texture.wgsl| при \mintinline{cpp}|mode == 2| делаем domain warping: перед чтением из текстуры искажаем текстурные координаты чем-нибудь зависящим от времени, например
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+vec2(sin(in.texcoord.y * 50.0 + immediates.time) * 0.01, 0.0)
+\end{tcblisting}
+\usemintedstyle{tango}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7}
+\slideimage{7.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 8*}
+Добавляем гауссово размытие
+\begin{itemize}
+\item В шейдере \mintinline{cpp}|shader_texture.wgsl| при \mintinline{cpp}|mode == 3| делаем гауссово размытие, например, с \mintinline{cpp}|N = 10| и \mintinline{cpp}|sigma = 6|
+\item Если будет тормозить, можно взять значения поменьше
+\item Код шейдера можно взять из слайдов лекции
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 8*}
+\slideimage{8.png}
+\end{frame}
+
+\end{document}
