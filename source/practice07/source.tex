@@ -1,0 +1,154 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 7: освещение}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Практика 7}
+\begin{itemize}
+\item Камеру можно двигать и вращать стрелками
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Практика 7}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Добавляем направленный источник света
+\begin{itemize}
+\item Добавляем в \mintinline{cpp}|LightsUniforms| направление на источник света (нормированный вектор!) и его яркость
+\item Направление должно как-то меняться со временем
+\item \textbf{NB:} \mintinline{wgsl}|vec3f| в uniform-буфере должен быть выровнен на 16 байт! Проще всего этого добиться, добавив руками padding-байты
+\item Добавляем в \mintinline{cpp}|Immediates| цвет (альбедо) нашего объекта (вектор с компонентами от 0 до 1)
+\item Во фрагментном шейдере (в \mintinline{text}|shader.wgsl|) меняем вычисление цвета на формулу диффузного освещения (без нормализации)
+\end{itemize}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+albedo * lightIntensity
+  * (ambient + max(0.0, dot(normal, lightDirection)))
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+\slideimage{1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Визуализируем точечный источник света
+\begin{itemize}
+\item Заводим переменную под положение точечного источника (можно сразу в \mintinline{cpp}|LightsUniforms|)
+\item Он тоже должен меняться со временем
+\item Визуализируем его с помощью \mintinline{cpp}|lightRenderPipeline|: ей нужно выставить \mintinline{cpp}|LightImmediates| с позицией источника света, и нарисовать с помощью \mintinline{cpp}|render_pass.draw(vertex_count = 6)|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Добавляем освещение от точечного источника
+\begin{itemize}
+\item Добавляем яркость и параметры затухания в \mintinline{cpp}|LightsUniforms|
+\item Коэффициенты затухания -- тоже 3D вектор, например \((1, 0, 0.1)\)
+\item Добавляем освещение от источника в шейдер
+\item Направление на источник нужно вычислить на основе его положения и положения текущего пикселя в пространстве \mintinline{cpp}|in.world_position|
+\item Затухание нужно вычислить на основе расстояния до источника (см. лекцию)
+\item \textbf{NB:} здесь удобно выделить функцию \mintinline{cpp}|computeLighting|, обрабатывающую один источник, зная его направление и цвет
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Добавляем specular освещение
+\begin{itemize}
+\item Добавляем в \mintinline{cpp}|Immediates| параметры \mintinline{cpp}|roughness| (например, 0) и \mintinline{cpp}|specularFactor| (например, 1)
+\item \mintinline{cpp}|specularFactor| -- просто множитель для specular слагаемого
+\item На основе \mintinline{cpp}|roughness| вычисляем \mintinline{cpp}|power| для модели Блинна-Фонга (с \mintinline{cpp}|halfway| вектором)
+\item Вычисляем направление из пикселя в сторону камеры, и на его основе -- \mintinline{cpp}|halfway| вектор
+\item Используя их, вычисляем specular компоненту \textbf{(на этот раз с нормализацией!)}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+\slideimage{4.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5*}
+Рисуем 9 копий модели
+\begin{itemize}
+\item У каждой копии должны быть свои значения \mintinline{cpp}|roughness| и \mintinline{cpp}|specularFactor|
+\item У каждой копии должна быть своя матрица \mintinline{cpp}|model|
+\item Должно быть достаточно 9 раз выставить \mintinline{cpp}|Immediates| и сделать \mintinline{cpp}|render_pass.draw_indexed()|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5*}
+\slideimage{5.png}
+\end{frame}
+
+\end{document}
