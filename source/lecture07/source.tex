@@ -731,6 +731,11 @@
 \end{frame}
 
 \begin{frame}[fragile]
+\frametitle{Источники света}
+\slideimage{point-vs-directional-light.png}
+\end{frame}
+
+\begin{frame}[fragile]
 \frametitle{Точечный источник света}
 \begin{itemize}
 \item Яркость убывает с расстоянием \(d\)
@@ -774,7 +779,7 @@
 \begin{frame}[fragile]
 \frametitle{Отражающая (зеркальная, specular) BRDF}
 \begin{equation*}
-{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = C(\lambda) \frac{power+2}{2\pi} \left(R_{\vec n}({\color{blue}\vec\omega_{in}})\cdot{\color{magenta}\vec\omega_{out}}\right)^{power}
+{\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = C(\lambda) \frac{power+2}{2\pi} \max\left(0, R_{\vec n}({\color{blue}\vec\omega_{in}})\cdot{\color{magenta}\vec\omega_{out}}\right)^{power}
 \end{equation*}
 \begin{itemize}
 \item Отражает больше света в направлении отражённого луча: \begin{math}R_{\vec n}(\vec \omega) = 2\vec n \cdot (\vec n \cdot \vec \omega) - \vec \omega\end{math}
@@ -844,7 +849,7 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
 \pause
 \item \begin{math}h = \frac{{\color{blue}\vec\omega_{in}} + {\color{magenta}\vec\omega_{out}}}{\|{\color{blue}\vec\omega_{in}} + {\color{magenta}\vec\omega_{out}}\|}\end{math} -- т.н. \textit{halfway vector} (часто встречается в моделях освещения)
 \begin{equation*}
-{\color{green}f_{specular}}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = C(\lambda) \frac{power+2}{2\pi} \left(h \cdot n\right)^{power}
+{\color{green}f_{specular}}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = C(\lambda) \frac{power+2}{2\pi} \max\left(0, h \cdot n\right)^{power}
 \end{equation*}
 \end{itemize}
 \end{frame}
@@ -852,6 +857,11 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
 \begin{frame}[fragile]
 \frametitle{Phong vs Blinn-Phong}
 \slideimage{blinn-phong.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Phong vs Blinn-Phong}
+\slideimage{blinn-phong-2.png}
 \end{frame}
 
 \begin{frame}[fragile]
@@ -883,6 +893,16 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
 \end{frame}
 
 \begin{frame}[fragile]
+\frametitle{Oren-Nayar}
+\slideimage{oren-nayar.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Oren-Nayar}
+\slideimage{oren-nayar-moon.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
 \frametitle{Модель Кука-Торренса (Cook-Torrance)}
 \begin{equation*}
 {\color{green}f}(p, {\color{blue}\vec\omega_{in}}, {\color{magenta}\vec\omega_{out}}, \lambda) = ({\color{blue}\vec\omega_{in}} \cdot n)
@@ -900,6 +920,16 @@ R = \frac{D \cdot G \cdot F}{4 \cdot ({\color{blue}\vec\omega_{in}} \cdot n) \cd
 \item \begin{math}F\end{math} -- коэффициент Френеля (Fresnel)
 \item Конкретный вид функций \begin{math}D, G, F\end{math} может варьироваться (см. ссылки)
 \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Cook-Torrance GGX}
+\slideimage{ggx-specular.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{GGX vs Blinn-Phong}
+\slideimage{ggx-phong.png}
 \end{frame}
 
 \begin{frame}[fragile]
