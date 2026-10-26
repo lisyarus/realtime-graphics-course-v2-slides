@@ -1,0 +1,201 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 8: Shadow mapping}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Практика 8}
+\begin{itemize}
+\item Камеру можно двигать и вращать стрелками
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Практика 8}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Выводим дебажный прямоугольник для shadow map
+\begin{itemize}
+\item В практике уже есть \mintinline{cpp}|debug_depth_texture_pipeline|
+\item Используем её, чтобы нарисовать дебажный \textbf{квадрат} в левом нижнем углу
+\item Для этого нужно правильно выставить \mintinline{cpp}|DebugDepthTextureImmediates|
+\item \mintinline{cpp}|draw(vertex_count = 6)|
+\item \textbf{NB:} квадрат должен оставаться квадратом при изменении размеров окна!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+\slideimage{1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Создаём shadow map и sampler
+\begin{itemize}
+\item Создаём текстуру shadow map: \(1024\times 1024\), \mintinline{cpp}$usage = RENDER_ATTACHMENT | TEXTURE_BINDING$, \mintinline{cpp}|format = Depth24Plus|
+\item Создаём sampler: \mintinline{cpp}|address_mode = CLAMP_TO_EDGE|, \mintinline{cpp}|filter = NEAREST|
+\item Добавляем их в lights bind group как binding 1 и 2, соответственно
+\item Для bind group layout: \mintinline{cpp}|texture.sample_type = Depth|, \mintinline{cpp}|sampler = Filtering|, 
+\item \textbf{NB:} Пока ничего не изменится, так как мы не используем shadow map
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Читаем shadow map в дебажном квадрате
+\begin{itemize}
+\item Добавляем shadow map и sampler как bindings в \mintinline{text}|debug_depth_texture_shader.wgsl|
+\item Для shadow map тип -- \mintinline{wgsl}|texture_depth_2d|
+\item Во фрагментном шейдере читаем shadow map \mintinline{wgsl}|textureSample(shadowMap, shadowMapSampler, in.texcoord)| и выводим его как цвет
+\item \textbf{NB:} Пока там записаны нулевые/мусорные значения -- мы ещё ничего не записали в shadow map
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Генерируем shadow map
+\begin{itemize}
+\item Создаём новый шейдер для генерации теней: он просто записывает \mintinline{wgsl}|position| входной вершины как \mintinline{wgsl}|@builtin(position)| выходного значения шейдера (другие атрибуты ему не нужны)
+\item Фрагментный шейдер тут тоже не нужен :)
+\item Создаём новый render pipeline для генерации теней: он использует новый шейдер, те же настройки depth-stencil, но не выводит никакой цвет (fragment state = null)
+\item Bind группы ему тоже не нужны
+\item Заводим новый render pass \textbf{до} основного: у него есть текстура shadow map в качестве depth attachment (\mintinline{cpp}|store_op = Store|), но нет ни одного color attachment
+\item В этом render pass рисуем нашу 3D модель используя новый render pipeline (\mintinline{cpp}|set_vertex_buffer()|, \mintinline{cpp}|set_index_buffer()|, \mintinline{cpp}|draw_indexed()|)
+\item Модель должна появиться в дебажном квадрате
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+\slideimage{4.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Вычисляем проекцию для shadow map
+\begin{itemize}
+\item Заводим оси проекции:
+\begin{itemize}
+\item \mintinline{cpp}|Z = -light_direction|
+\item \mintinline{cpp}|X| и \mintinline{cpp}|Y| -- любые, образующие с \mintinline{cpp}|Z| ортонормированный базис
+\end{itemize}
+\item Эти векторы дадут \textbf{строки} матрицы перевода в систему координат теней
+\item Диапазон значений Z -- \([0, 1]\), поэтому тени обрежутся плоскостью, проходящей через начало координат
+\item Это проще всего исправить, домножив проекцию теней на матрицу преобразования \(z \mapsto \frac{z+1}{2}\)
+\item Получившуюся матрицу нужно передать в шейдер генерации теней (проще всего как immediate) и применить к входным вершинам
+\item Shadow map в дебажном прямоугольнике должна начать двигаться со временем
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\slideimage{5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Накладываем тени
+\begin{itemize}
+\item В lights uniforms добавляем матрицу shadow projection, вычисленную на предыдущем шаге
+\item В основной шейдер добавляем bindings для shadow map и sampler
+\item Во фрагментном шейдере вычисляем, находится ли в тени данный пиксель (см. слайды лекции)
+\item Применяем освещение от источника света только если мы \textbf{не находимся} в тени (ambient применяем всегда!)
+\item \textbf{NB:} Будет очень сильный shadow acne
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\slideimage{6.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7}
+Добавляем shadow bias
+\begin{itemize}
+\item Вычитаем маленькое значение из \mintinline{cpp}|shadow_coord.z|
+\item Значение нужно подобрать, чтобы исчез shadow acne, но чтобы тени не съехали слишком сильно
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7}
+\slideimage{7.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 8*}
+Добавляем PCF
+\begin{itemize}
+\item Создаём ещё один sampler, \mintinline{cpp}|filter = Linear|, \mintinline{cpp}|compare = Less| (старый sampler нельзя переиспользовать -- сломается дебажная визуализация shadow map)
+\item Добавляем его в lights bind group, \mintinline{cpp}|sampler = Comparison|
+\item Добавляем соответствующий binding в основной шейдере, тип sampler'а -- \mintinline{wgsl}|sampler_comparison|
+\item При наложении теней в основном шейдере используем не \mintinline{wgsl}|textureSample|, а \mintinline{wgsl}|textureSampleCompare| -- она вернёт \textbf{множитель}, на который нужно домножить освещение от источника света
+\item Вблизи тени должны стать гладкими
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 8*}
+\slideimage{8.png}
+\end{frame}
+
+\end{document}
