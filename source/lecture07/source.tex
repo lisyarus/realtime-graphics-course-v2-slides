@@ -816,16 +816,16 @@ fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
 
   let cosine = dot(in.normal, uniforms.light_direction);
   float light_factor = max(0.0, cosine);
-  vec3 reflected_direction =
+  let reflected_direction =
     reflect(-uniforms.light_direction, in.normal);
 
-  vec3 diffuse = uniforms.light_color * light_factor / PI;
-  vec3 specular = uniforms.light_color * light_factor
+  let diffuse = uniforms.light_color * light_factor / PI;
+  let specular = uniforms.light_color * light_factor
     * (material.specular_power + 2.0) / (2.0 * PI)
     * pow(max(0.0, dot(reflected_direction, view_direction)),
           material.specular_power);
 
-  vec3 result_color = material.albedo
+  let result_color = material.albedo
     * (uniforms.ambient_color + diffuse + specular);
   out_color = vec4(result_color, 1.0);
 }
