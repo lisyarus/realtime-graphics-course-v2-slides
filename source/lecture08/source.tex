@@ -1,0 +1,760 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\usepackage{amsmath}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations}
+\usetikzlibrary{decorations.pathreplacing}
+\usepackage{xifthen}
+
+\usetheme{metropolis}
+\setminted{fontsize=\footnotesize}
+
+\definecolor{red}{rgb}{1,0,0}
+\definecolor{green}{rgb}{0,0.5,0}
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{magenta}{rgb}{0.75,0,0.75}
+\definecolor{codebg}{RGB}{29,35,49}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\usemintedstyle{tango}
+
+\title{Компьютерная графика}
+\subtitle{Лекция 8: Геометрические шейдеры, compute шейдеры, storage buffers, shader atomics, shadow volumes, shadow mapping}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\usemintedstyle{solarized-light}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Геометрические шейдеры}
+\begin{itemize}
+\item Опциональный шейдер, встраивающийся после вершинного шейдера, до perspective divide
+\pause
+\item Оперирует целыми примитивами (точками/линиями/треугольниками), т.е. наборами вершин
+\pause
+\item Может на лету менять тип примитива и количество вершин
+\pause
+\item Поддерживаются в OpenGL, DirectX, Vulkan
+\pause
+\item \textbf{Не поддерживается} в WebGPU, Metal
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Геометрические шейдеры}
+\begin{itemize}
+\item Геометрические шейдеры тяжело ложатся на архитектуру GPU из-за отсутствия чёткого соответствия входов и выходов
+\pause
+\item Требуют дополнительной временной памяти, не используют вершинный кеш
+\pause
+\item Производительность очень сильно зависит от GPU, драйвера, и самого шейдера
+\pause
+\item В современности их стараются не использовать, заменяя более надёжными инструментами: более сложными вершинными шейдерами, instancing'ом, compute шейдерами
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=geometry_shader_examples]
+\frametitle{Геометрические шейдеры: примеры использования}
+\fontsize{10pt}{10pt}
+\begin{itemize}
+\item Расчёт нормалей для flat shading'а
+\pause
+\begin{itemize}
+\item Вход: треугольник (тройка вершин)
+\item Выход: те же вершины с посчитанной нормалью
+\end{itemize}
+\pause
+\item Визуализация нормалей
+\pause
+\begin{itemize}
+\item Вход: вершина с нормалью
+\item Выход: линия из двух вершин -- исходная вершина, исходная вершина + нормаль
+\end{itemize}
+\pause
+\item Shadow volumes -- алгоритм рисования теней
+\pause
+\item Billboards -- плоские фигуры, всегда смотрящие в сторону камеры
+\pause
+\begin{itemize}
+\item Вход: одна вершина (точка)
+\item Выход: набор треугольников
+\pause
+\item Системы частиц
+\pause
+\item Облака
+\pause
+\item Далёкие деревья
+\pause
+\item Трава
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Flat shading}
+\slideimage{flat-shading.png}
+\end{frame}
+
+\againframe<1-3>{geometry_shader_examples}
+
+\begin{frame}[fragile]
+\frametitle{Визуализация нормалей}
+\slideimage{normals-viz.png}
+\end{frame}
+
+\againframe<3-6>{geometry_shader_examples}
+
+\begin{frame}[fragile]
+\frametitle{Billboards}
+\slideimage{billboards.jpg}
+\end{frame}
+
+\againframe<6-8>{geometry_shader_examples}
+
+\begin{frame}[fragile]
+\frametitle{Billboards: система частиц (дым)}
+\slideimage{smoke.jpg}
+\end{frame}
+
+\againframe<8-9>{geometry_shader_examples}
+
+\begin{frame}[fragile]
+\frametitle{Billboards: облака}
+\slideimage{clouds.jpg}
+\end{frame}
+
+\againframe<9-10>{geometry_shader_examples}
+
+\begin{frame}[fragile]
+\frametitle{Billboards: деревья}
+\slideimage{trees.jpg}
+\end{frame}
+
+\againframe<10-11>{geometry_shader_examples}
+
+\begin{frame}[fragile]
+\frametitle{Billboards: трава}
+\slideimage{grass.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Геометрические шейдеры: ссылки}
+\begin{itemize}
+\item \href{https://www.khronos.org/opengl/wiki/Geometry_Shader}{\nolinkurl{khronos.org/opengl/wiki/Geometry\_Shader}}
+\item \href{https://learnopengl.com/Advanced-OpenGL/Geometry-Shader}{\nolinkurl{learnopengl.com/Advanced-OpenGL/Geometry-Shader}}
+\item \href{https://open.gl/geometry}{\nolinkurl{open.gl/geometry}}
+\item \href{https://www.lighthouse3d.com/tutorials/glsl-tutorial/geometry-shader}{\nolinkurl{lighthouse3d.com/tutorials/glsl-tutorial/geometry-shader}}
+\item \href{https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-7-rendering-countless-blades-waving-grass}{\texttt{GPU Gems, Chapter 7. Rendering Countless Blades of Waving Grass}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Compute шейдеры}
+\begin{itemize}
+\item Compute шейдеры -- механизм для запуска произвольных параллельных вычислений на GPU, минующий весь графический конвейер
+\pause
+\item Для их запуска нужен не render pass, а \textit{compute pass} (создаётся так же через command encoder)
+\pause
+\item Он не привязан к цветовым буферам или буферам глубины, для его создания не нужно почти никаких настроек
+\pause
+\item Так же как с render pass'ом, можно выставить bing группы и immediates
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Compute pipeline}
+\begin{itemize}
+\item Compute pass умеет использовать только \textit{compute pipelines}
+\pause
+\item Compute pipeline создаётся аналогично render pipeline'ам: нужен pipeline layout, shader module и entry point
+\pause
+\item Так как compute шейдеры не используют графический конвейер, связанных с ним настроек нет (vertex/fragment/primitive state и т.п.)
+\pause
+\item Команд \mintinline{cpp}|draw()| у compute pass'а нет, основной способ инициировать вычисление -- \mintinline{cpp}|compute_pass.dispatch_workgroups()|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Compute шейдеры: модель исполнения}
+\begin{itemize}
+\item Compute shader'ы запускаются сеткой \(N_x\times N_y\times N_z\) ячеек, каждая ячейка соответствует одному потоку исполнения внутри GPU
+\pause
+\item GPU исполняют задачи SIMD-блоками (обычно 32 или 64 парралельных исполнения)
+\pause
+\item Compute шейдеры явно отражают это в своём интерфейсе: они запускаются как набор из нескольких \textit{workgroup} одинакового размера \(S_x\times S_y\times S_z\) (\mintinline{cpp}|workgroup_size|, задаётся в шейдере)
+\pause
+\item Аргументы к \mintinline{cpp}|compute_pass.dispatch_workgroups()| -- количество запущенных workgroup \(C_x\times C_y\times C_z\) (\mintinline{cpp}|workgroup_count|)
+\pause
+\item В итоге, \(N_x = S_x \cdot C_x\), и аналогично по другим осям
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Compute шейдеры: модель исполнения}
+\begin{itemize}
+\item Выбор размера workgroup -- сложная задача:
+\pause
+\begin{itemize}
+\item Один SIMD-блок GPU может выполнять только одну workgroup \(\Longrightarrow\) в идеале размер workgroup должен быть кратен размеру SIMD-блока
+\pause
+\item Большой размер workgroup требует больше локальной памяти, но может позволить переиспользовать больше вычислений (через workgroup shared memory)
+\pause
+\item Как слишком маленькими, так и слишком большими workgroup можно упереться в различные hardware лимиты
+\end{itemize}
+\pause
+\item Почти всегда SIMD-блоки имеют размер в 32 или 64 потока, поэтому стандартный выбор для workgroup size -- 64 (произведение по всем осям)
+\pause
+\item Это удобно для обработки изображений (блоки \(8\times 8\)) или 3D-данных (блоки \(4\times 4\times 4\))
+\pause
+\item Если реальный объём работы (например, размер изображения) не кратен размеру workgroup, лишние вычисления обычно явно пропускаются в шейдере
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Compute шейдеры: детали}
+\begin{itemize}
+\item Entry point для compute pipeline (функция в шейдере) должна быть помечена атрибутами \mintinline{wgsl}|@compute| и \mintinline{wgsl}|@workgroup_size(x, y, z)| (\mintinline{wgsl}|y| и \mintinline{wgsl}|z| можно не указывать, если они равны 1)
+\pause
+\item Встроенные переменные compute шейдера:
+\begin{itemize}
+\item \mintinline{wgsl}|@builtin(local_invocation_id)| -- 3D индекс потока внутри workgroup (\mintinline{cpp}|0..workgroup_size-1|)
+\item \mintinline{wgsl}|@builtin(workgroup_id)| -- 3D индекс workgroup внутри вызова dispatch (\mintinline{cpp}|0..workgroup_count-1|)
+\item \mintinline{wgsl}|@builtin(global_invocation_id)| -- 3D индекс потока внутри вызова dispatch (вычисляется как \mintinline{cpp}|workgroup_id * workgroup_size + local_invocation_id|)
+\item \mintinline{wgsl}|@builtin(local_invocation_index)| -- линеаризованный индекс потока внутри workgroup
+\item \mintinline{wgsl}|@builtin(global_invocation_index)| -- линеаризованный индекс потока внутри dispatch
+\end{itemize}
+\pause
+\item Встроенных входных или выходных данных нет, все операции делаются через данные, переданные в bind groups
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Compute шейдеры: пример}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@group(0) @binding(0) var<storage, read> a: array<f32>;
+@group(0) @binding(1) var<storage, read> b: array<f32>;
+@group(0) @binding(2) var<storage, read_write> c: array<f32>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+    let index = id.x;
+    if (index < arrayLength(&result)) {
+        c[index] = a[index] + b[index];
+    }
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Compute шейдеры: пример}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@group(0) @binding(0) var image:
+  texture_storage_2d<rgba8unorm, read_write>;
+
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) id: vec3u) {
+    if (any(id.xy >= textureDimensions(imgOutput))) {
+      return;
+    }
+
+    let colorIn = textureLoad(image, id.xy);
+
+    let colorOut = vec4f(vec3f(1.0) - colorIn.rgb, colorIn.a);
+
+    textureStore(image, id.xy, colorOut);
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Storage buffers}
+\begin{itemize}
+\item Буферы, созданные с флагом \mintinline{cpp}|usage = STORAGE|
+\pause
+\item Их можно добавить в bind группу с режимом \mintinline{cpp}|storage| или \mintinline{cpp}|read_only_storage|
+\pause
+\item В шейдере должны быть объявлены как \mintinline{wgsl}|var<storage, read>| или \mintinline{wgsl}|var<storage, read_write>|, соответственно
+\pause
+\item Тип данных -- любой, в том числе может быть массив неизвестного размера: \mintinline{wgsl}|array<vec4f>| (размер массива можно узнать через функцию \mintinline{wgsl}|arrayLength|)
+\pause
+\item Основной способ передать произвольные данные на GPU, размер ограничен размером видеопамяти
+\pause
+\item Не read-only буферы можно использовать только во фрагментных и compute шейдерах (с фичей \mintinline{cpp}|VERTEX_WRITABLE_STORAGE| можно и в вершинных -- не поддерживается в браузерной версии WebGPU)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Storage textures}
+\begin{itemize}
+\item Текстуры, созданные с флагом \mintinline{cpp}|usage = STORAGE_BINDING|
+\pause
+\item Их тоже можно добавить в bind группу с явным указанием формата
+\pause
+\item В шейдере тоже объявляются с явным указанием формата, например \mintinline{wgsl}|texture_storage_2d<rgba8unorm, read_write>|
+\pause
+\item Нельзя использовать вместе с семплерами, только читать и писать конкретные пиксели через \mintinline{wgsl}|textureLoad| и \mintinline{wgsl}|textureStore|
+\pause
+\item Поддерживают ограниченный набор форматов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: теория}
+\begin{itemize}
+\item Точка сцены, в которую не попадает (заблокирован чем-то) прямой свет из конкретного источника света
+\item Свойство точки по отношению к конкретному источнику света
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени}
+\slideimage{shadows1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: теория}
+\begin{itemize}
+\item Если источник света точечный (или бесконечно удалённый), тень -- бинарное свойство: луч из точки сцены в источник света или пересекает что-то (точка в тени), или нет (точка не в тени) \begin{math}\Longrightarrow\end{math} жёсткие тени (\textit{hard shadows})
+\pause
+\item Если источник света объёмный, точка сцены может находиться в тени относительно части источника света, и не находиться в тени относительно другой его части \begin{math}\Longrightarrow\end{math} мягкие тени (\textit{soft shadows})
+\pause
+\begin{itemize}
+\item Точки, полностью находящиеся в тени -- \textit{umbra}
+\item Точки, частично находящиеся в тени -- \textit{penumbra} (\textit{полутень})
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: мягкие vs жёсткие}
+\slideimage{shadow-scheme1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Мягкие тени}
+\slideimage{shadows2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Солнечное затмение}
+\slideimage{eclipse.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: теория}
+\begin{itemize}
+\item Реальные источники света -- объёмные
+\pause
+\item Размер и форма penumbra зависит от размеров и формы источника света, а также от расстояния до него (чем дальше, тем меньше penumbra)
+\pause
+\begin{itemize}
+\item В пределе расстояния \begin{math}\rightarrow\infty\end{math} мягкая тень вырождается в жёсткую
+\end{itemize}
+\pause
+\item В real-time графике получить правильные тени (как жёсткие, так и мягкие) довольно сложно
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: raytracing}
+\begin{itemize}
+\item При простом raytracing'е (\textit{Whitted-style}, без полного решения rendering equation) для получения жёсткой тени можно послать дополнительный луч в направлении света (shadow ray): если он что-то пересёк, точка находится в тени
+\pause
+\item При raytracing'е с монте-карло интегрированием для global illumination тени (как жёсткие, так и мягкие) получаются автоматически
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Тени: real-time алгоритмы}
+\begin{itemize}
+\item Shadow volumes
+\item Shadow mapping
+\item Raytraced shadows
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=shadow_volumes]
+\frametitle{Shadow volumes (stencil shadows)}
+\begin{itemize}
+\item Тень от конкретного объекта -- некая (полубесконечная) трёхмерная область пространства (shadow volume)
+\pause
+\item Нарисуем её как трёхмерный объект (построим и нарисуем её грани)
+\pause
+\item Если в конкретный пиксель попало одинаковое количество front-facing и back-facing граней, то он не в тени, иначе -- в тени
+\pause
+\item Количество пересечений луча из камеры с гранями shadow volume вычисляем с помощью stencil буфера
+\end{itemize}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=shadow_volumes]
+\frametitle{Shadow volumes (stencil shadows)}
+\slideimage{shadow-volume.png}
+\end{frame}
+
+\againframe<1->{shadow_volumes}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes (stencil shadows)}
+\slideimage{shadow-volumes-scheme.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes: алгоритм}
+\begin{itemize}
+\item Выключаем рисование в цветовой буфер и буфер глубины (как настройки render pipeline, или как отдельный render pass), но \textbf{не выключаем} тест глубины
+\pause
+\item Настраиваем запись в stencil буфер: \mintinline{cpp}|+1| для front-facing треугольников, \mintinline{cpp}|-1| для back-facing
+\pause
+\item Вычисляем и рисуем shadow volume для каждого объекта
+\pause
+\item Обратно включаем рисование цвета и глубины
+\pause
+\item Настраиваем stencil-тест так, чтобы рисовать только пиксели, в которых \mintinline{cpp}|stencil == 0|, и рисуем сцену шейдером, вычисляющим освещение
+\pause
+\item Настраиваем stencil-тест так, чтобы рисовать только пиксели, в которых \mintinline{cpp}|stencil != 0|, и рисуем сцену шейдером, игнорирующим освещение
+\pause
+\item Повторяем для каждого источника света
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volume}
+\slideimage{shadow-volume2.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volume}
+\slideimage{shadow-volume3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes (Doom 3)}
+\slideimage{doom3-shadows.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes: как вычислять shadow volume?}
+\begin{itemize}
+\item Шаг 1: определить shadow edges -- рёбра модели, у которых один соседний треугольник обращён к источнику света \begin{math}\left(\vec n \cdot \vec r > 0\right)\end{math}, а второй -- против источника света \begin{math}\left(\vec n \cdot \vec r \leq 0\right)\end{math}
+\pause
+\item Щаг 2: для каждого shadow edge построить четырёхугольную грань shadow volume -- к точкам ребра \begin{math}p_1, p_2\end{math} добавлются точки \begin{math}p_1 + D \cdot \frac{p_1 - o}{|p_1 - o|}\end{math} и аналогично для \begin{math}p_2\end{math}
+\begin{itemize}
+\item \begin{math}o\end{math} -- координаты источника света
+\item \begin{math}D\end{math} -- расстояние, до которого отбрасывается тень (в идеале мы хотим \begin{math}D\rightarrow\infty\end{math}, для этого можно воспользоваться однородными координатами)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes (Doom 3)}
+\slideimage{shadow-edge.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes: как вычислять shadow volume?}
+\begin{itemize}
+\item Два варианта: на CPU или на GPU
+\pause
+\item На CPU: очень дорого (положение модели и источника света могут меняться каждый кадр)
+\pause
+\item На GPU -- много вариантов (вершинный/геометрический/compute шейдер), главная проблема -- передать в шейдер две вершины одного ребра + две вершины соседних треугольников
+\pause
+\item В любом случае нужны входные данные, специально адаптированные для генерации shadow volume
+\pause
+\item Шейдер проверяет, является ли ребро shadow edge, и генерирует грань shadow volume
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes}
+\begin{itemize}
+\item {\color{green}+} Pixel-perfect жёсткие тени
+\item {\color{red}---} Алиасинг
+\item {\color{red}---} Сложно получить мягкие тени
+\item {\color{red}---} Нужно на лету генерировать геометрию
+\item {\color{red}---} Требует правильной входной геометрии (без дырок и дублирования)
+\item {\color{red}---} Не работает, если камера находится внутри тени (исправляется с помощью т.н. Carmack's Reverse)
+\item {\color{red}---} Ресурсозатратен: даже для маленького объекта его shadow volume может занимать значительную часть сцены \begin{math}\Longrightarrow\end{math} слишком много растеризации, чтения/записи памяти (stencil buffer)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes с плохой геометрией}
+\slideimage{shadow-volume-bad-mesh.jpg}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes}
+\begin{itemize}
+\item Thief 3
+\item Doom 3
+\item Quake 4
+\item Prey
+\item Far Cry
+\item F.E.A.R 1, 2, 3
+\item S.T.A.L.K.E.R.
+\item Timeshift
+\item и др.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow volumes: ссылки}
+\begin{itemize}
+\item \href{https://en.wikipedia.org/wiki/Shadow_volume}{\nolinkurl{en.wikipedia.org/wiki/Shadow\_volume}}
+\item \href{https://ogldev.org/www/tutorial40/tutorial40.html}{\nolinkurl{ogldev.org/www/tutorial40/tutorial40.html}}
+\item \href{https://developer.nvidia.com/gpugems/gpugems/part-ii-lighting-and-shadows/chapter-9-efficient-shadow-volume-rendering}{\texttt{GPU Gems, Chapter 9. Efficient Shadow Volume Rendering}}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: идея}
+\begin{itemize}
+\item Самое популярное семейство алгоритмов рисования теней
+\pause
+\item Идея: представим, что источник света -- это камера (наблюдатель)
+\item Тень -- это то, что \textit{не видит} источник света
+\pause
+\item Как понять, что видит источник света? \pause Нарисовать!
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: алгоритм}
+\begin{itemize}
+\item Рисуем сцену в текстуру (\textit{shadow map}, карта теней) с точки зрения источника света (цветовой буфер не нужен, достаточно буфера глубины)
+\pause
+\item Рисуем сцену на экран, фрагментный шейдер читает \textit{буфер глубины} (shadow map), нарисованный с точки зрения источника света -- там содержатся расстояния от источника до ближайшей (к источнику) поверхности
+\item Если расстояние от источника до рисуемого пикселя больше, чем значение из буфера глубины, -- текущий пиксель находится в тени
+\pause
+\item \textbf{\alert{N.B.}} Линейная фильтрация для буфера глубины \underline{не имеет смысла} -- будут артефакты на границах объектов
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: алгоритм}
+\slideimage{shadow-mapping1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: фрагментный шейдер}
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+@group(0) @binding(0) var<uniform> shadow_projection: mat4x4f;
+@group(0) @binding(1) var shadow_map: texture_depth_2d;
+@group(0) @binding(2) var shadow_map_sampler: sampler;
+
+@fragment
+fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
+  var shadow_coord = shadow_projection * in.world_position;
+  shadow_coord /= shadow_coord.w; // perspective divide
+
+  var is_in_shadow = false;
+  if (all(abs(shadow_coord.xy) < vec2f(1.0))) {
+    let shadow_texcoord = vec2f(0.5)
+      + shadow_coord.xy * vec2f(0.5, -0.5);
+
+    is_in_shadow = textureSample(shadow_map, shadow_map_sampler,
+      shadow_texcoord) < shadow_coord.z;
+  }
+}
+\end{tcblisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: буфер глубины}
+\slideimage{shadow-mapping-depth.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: результат}
+\slideimage{shadow-mapping2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: проекция}
+\begin{itemize}
+\item Как выбрать проекцию камеры (\mintinline{cpp}|shadow_projection|) для shadow map?
+\pause
+\item Удалённый источник освещает всю сцену с одного направления \begin{math}\Longrightarrow\end{math} удобно использовать ортографическую проекцию
+\pause
+\item Проекцию надо подобрать так, чтобы в видимую область попала вся сцена
+\pause
+\item Можно спроецировать все объекты на плоскость, перпендикулярную направлению на свет (которое можно считать Z-осью этой камеры), взять любые два ортогональных вектора X и Y в этой плоскости, и найти bounding box сцены в координатах XYZ -- это даст размеры и ориентацию области shadow map
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: проекция}
+\begin{itemize}
+\item Точечный источник светит во все стороны \begin{math}\Longrightarrow\end{math} удобно использовать перспективную проекцию и cubemap-текстуру
+\pause
+\item 6 shadow map (по одной на каждую грань) с соответствующей перспективной проекцией
+\pause
+\item Положение камеры совпадает с положением источника света, виртуальный `экран' совпадает с отрисовываемой гранью shadow map
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow acne}
+\slideimage{shadow-acne.png}
+\end{frame}
+
+\begin{frame}<1>[fragile,label=acne]
+\frametitle{Shadow acne}
+\begin{itemize}
+\item Артефакт, возникающий из-за дискретности shadow map: если луч света не перпендикулярен плоскости объекта, рядом с центром пикселя shadow map будут точки с меньшей или большей глубиной
+\pause
+\item Первый способ исправить: добавить к значению, прочитанному из из shadow map, некую константу (shadow bias)
+\begin{itemize}
+\item Часто эту константу умножают на тангенс угла падения света
+\end{itemize}
+\pause
+\item Второй способ исправить: рисовать только back-facing грани (т.е. обращённые против света) в shadow map
+\begin{itemize}
+\item Теперь shadow acne возникнет на back-facing гранях, но мы и без shadow map знаем, что они в тени!
+\item Работает только с правильной геометрией (двусторонней, без дырок, и т.п.)
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow acne}
+\slideimage{shadow-acne-scheme.png}
+\end{frame}
+
+\againframe<1->{acne}
+
+\begin{frame}[fragile]
+\frametitle{Back-facing shadows}
+\slideimage{shadow-mapping-backface.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Peter panning}
+\slideimage{peter-panning.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Peter panning}
+\begin{itemize}
+\item Объекты кажутся приподнятыми над поверхностью из-за того, что их тень начинается не сразу под объектом
+\pause
+\item Усиливается при использовании shadow bias
+\pause
+\item Лучший способ исправить -- не использовать слишком тонкую геометрию
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping}
+\slideimage{shadow-mapping3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Разрешение shadow map}
+\slideimage{shadow-map-resolution.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping}
+\fontsize{10pt}{10pt}
+\begin{itemize}
+\item При низком разрешении shadow map хорошо видны `пиксели' теней
+\pause
+\item Чем выше разрешение, тем лучше жёсткая тень
+\pause
+\begin{itemize}
+\item Алгоритм silhouette mapping позволяет получить жёсткую тень без слишком большого разрешения
+\end{itemize}
+\pause
+\item Можно слегка размыть тень, избавившись от `пикселей' и получив аппроксимацию мягких теней
+\pause
+\begin{itemize}
+\item Размывать нужно результат сравнения глубины со значением в shadow map, а \textbf{не} саму shadow map!
+\pause
+\item Этот приём известен как \textit{percentage-closer filtering (PCF)}
+\pause
+\item В WebGPU есть встроенная реализация в виде \textit{comparison sampling}
+\end{itemize}
+\pause
+\item Более современные вариации shadow maps пишут в текстуру не глубину, а какие-нибудь значения, которые имеет смысл складывать и усреднять
+\pause
+\begin{itemize}
+\item Позволяет использовать фильтрацию текстур, mipmaps, размытие shadow map
+\pause
+\item Exponential shadow maps, variance shadow maps
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Comparison sampling}
+\begin{itemize}
+\item Нужно создать специальный sampler с настройкой \mintinline{cpp}|compare| -- она будет управлять тем, какой тип сравнения будет происходить (\mintinline{cpp}|Less|, \mintinline{cpp}|Equal|, и т.п.)
+\pause
+\item В bind group layout нужно указать \mintinline{cpp}|sampler_binding_type = Comparison|
+\pause
+\item В шейдере нужно объявить uniform-переменную типа \mintinline{wgsl}|sampler_comparison|
+\pause
+\item В шейдере используем функцию \mintinline{wgsl}|textureSampleCompare()| -- она сравнивает значения глубин соседних пикселей с переданной глубиной, и возвращает результат билинейной интерполяции результатов сравнения
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow sampler с линейной фильтрацией}
+\slideimage{pcf.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow sampler с линейной фильтрацией и 7x7 размытием по Гауссу}
+\slideimage{pcf_gauss.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Shadow mapping: ссылки}
+\begin{itemize}
+\item \href{https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping}{\nolinkurl{learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping}}
+\item \href{http://www.opengl-tutorial.org/intermediate-tutorials/tutorial-16-shadow-mapping}{\nolinkurl{opengl-tutorial.org/intermediate-tutorials/tutorial-16-shadow-mapping}}
+\item \href{https://ogldev.org/www/tutorial23/tutorial23.html}{\nolinkurl{ogldev.org/www/tutorial23/tutorial23.html}}
+\item \href{https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-17-efficient-soft-edged-shadows-using}{\texttt{GPU Gems 2, Chapter 17. Efficient Soft-Edged Shadows Using Pixel Shader Branching}}
+\end{itemize}
+\end{frame}
+
+\end{document}
