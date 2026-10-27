@@ -60,6 +60,50 @@
 \frame{\titlepage}
 
 \begin{frame}[fragile]
+\frametitle{Виды шейдеров}
+\begin{itemize}
+\item \textbf{Render pipeline}
+\begin{itemize}
+\item Vertex shader
+\item Tessellation control shader
+\item Tessellation evaluation shader
+\item Geometry shader
+\item Fragment shader
+\end{itemize}
+\pause
+\item \textbf{Mesh shading pipeline}
+\begin{itemize}
+\item Task shader
+\item Mesh shader
+\item Fragment shader
+\end{itemize}
+\pause
+\item \textbf{Ray tracing pipeline}
+\begin{itemize}
+\item Ray generation shader
+\item Intersection shader
+\item Any-hit shader
+\item Closest-hit shader
+\item Miss shader
+\end{itemize}
+\pause
+\item \textbf{Compute pipeline}
+\begin{itemize}
+\item Compute shader
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Виды шейдеров}
+\begin{itemize}
+\item Из-за кросс-платформенности, WebGPU поддерживает только базовый \textbf{render pipeline (vertex + fragment)} и \textbf{compute pipeline}
+\pause
+\item В wgpu есть экспериментальная поддержка \textbf{mesh shaders} и \textbf{ray queries}, ведётся работа над поддержкой \textbf{ray tracing pipelines}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
 \frametitle{Геометрические шейдеры}
 \begin{itemize}
 \item Опциональный шейдер, встраивающийся после вершинного шейдера, до perspective divide
