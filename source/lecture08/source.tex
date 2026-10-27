@@ -235,7 +235,7 @@
 \pause
 \item Он не привязан к цветовым буферам или буферам глубины, для его создания не нужно почти никаких настроек
 \pause
-\item Так же как с render pass'ом, можно выставить bing группы и immediates
+\item Так же как с render pass'ом, можно выставить bind группы и immediates
 \end{itemize}
 \end{frame}
 
@@ -317,7 +317,7 @@
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) id: vec3u) {
     let index = id.x;
-    if (index < arrayLength(&result)) {
+    if (index < arrayLength(&c)) {
         c[index] = a[index] + b[index];
     }
 }
@@ -333,7 +333,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) id: vec3u) {
-    if (any(id.xy >= textureDimensions(imgOutput))) {
+    if (any(id.xy >= textureDimensions(image))) {
       return;
     }
 
@@ -466,7 +466,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 \end{itemize}
 \end{frame}
 
-\begin{frame}<1>[fragile,label=shadow_volumes]
+\begin{frame}<1>[fragile]
 \frametitle{Shadow volumes (stencil shadows)}
 \slideimage{shadow-volume.png}
 \end{frame}
