@@ -1,0 +1,157 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 9: Variance shadow mapping}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Практика 9}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Подбираем проекцию для shadow map, в которую попадает вся сцена
+\begin{itemize}
+\item При загрузке 3D модели вычисляем её bounding box (на C++ будет полезен файл \mintinline{cpp}|<math/box.hpp>|)
+\item За центр проекции берём центр bounding box'а
+\item При рендеринге, по 8-ми вершинам bounding box'а находим размер области проекции по \(X\) (в коде это \mintinline{cpp}|light_X|) как \(\max\limits_V |(V-C)\cdot X|\)
+\item Аналогично по \(Y\) и \(Z\)
+\item Строим матрицу ортографической проекции, в shadow map теперь должна попасть вся сцена
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+\slideimage{1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Создаём текстуру для VSM
+\begin{itemize}
+\item Создаём ещё одну текстуру shadow map с форматом \mintinline{cpp}|RG32F|, создаём для неё texture view, добавляем её в lights bind group
+\item При генерации shadow map (первый render pass) добавляем эту текстуру в качестве color target
+\item В shadow pipeline добавляем фрагментный шейдер который выводит цвет \mintinline{wgsl}|vec4f(z, z * z, 0.0, 0.0)|
+\item В дебажном выводе shadow map теперь рисуем значение из этой текстуры (нужно добавить соответствующий binding в шейдер)
+\item \textbf{NB:} Она будет желтоватой, так как в ней нулевой синий канал
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Реализуем VSM через неравенство Чебышева
+\begin{itemize}
+\item Меняем наш shadow sampler на линейную фильтрацию (min/mag фильтры)
+\item В основной шейдер добавляем binding для нашей новой текстуры
+\item Используем её вместо старой текстуры глубины для реализации variance shadow map (см. слайды лекции): в текстуре записаны \(\mu = \mathbb E [z]\) и \(\mathbb E [z^2]\), по ним нужно вычислить \(\sigma^2\) и финальное значение освещённости
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Добавляем shadow bias через shader derivatives
+\begin{itemize}
+\item При генерации shadow map, используя \mintinline{wgsl}|dpdx()| и \mintinline{wgsl}|dpdy()| вычисляем поправку к \(\mathbb E[z^2]\) (см. слайды лекции)
+\item \textbf{NB:} Скорее всего, картинка почти не изменится
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Исправляем light bleeding
+\begin{itemize}
+\item Подбираем значение \(\delta\) и переводим диапазон значений освещённости (посчитанных через неравенство Чебышева):
+\begin{itemize}
+\item Значение \([0, \delta]\) должны перейти в \(0\)
+\item Значение \([\delta, 1]\) должны перейти в \([0, 1]\)
+\end{itemize}
+\item Слишком маленькое \(\delta\) не исправит light bleeding
+\item Слишком большое \(\delta\) сделает тени слишком жёсткими
+\item Нужно подобрать самое маленькое подходящее значение :)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\slideimage{5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6*}
+Размываем тени
+\begin{itemize}
+\item Перед вычислением \(\mu\) и \(\sigma\), усредняем значения из shadow map с гауссовыми весами
+\item \textbf{NB:} Усреднять нужно именно \textbf{значения из самой текстуры}, а не вычисленные через неравенство Чебышева значения освещённости
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6*}
+\slideimage{6.png}
+\end{frame}
+
+\end{document}
