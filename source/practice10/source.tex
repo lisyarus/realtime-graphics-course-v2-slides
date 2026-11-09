@@ -1,0 +1,186 @@
+% (c) Nikita Lisitsa, lisyarus@gmail.com, 2026
+
+\documentclass[10pt]{beamer}
+
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+\usepackage{minted}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{minted}
+
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\usetheme{metropolis}
+
+\usepackage{adjustbox}
+
+\usepackage{color}
+\usepackage{soul}
+
+\usepackage{hyperref}
+
+\definecolor{codebg}{RGB}{29,35,49}
+
+\setminted{fontsize=\footnotesize}
+
+\setlength\partopsep{-\topsep}
+
+\definecolor{blue}{rgb}{0,0,1}
+\definecolor{red}{rgb}{1,0,0}
+
+\usemintedstyle{tango}
+
+\makeatletter
+\newcommand{\slideimage}[1]{
+  \begin{figure}
+    \begin{adjustbox}{width=\textwidth, totalheight=\textheight-2\baselineskip-2\baselineskip,keepaspectratio}
+      \includegraphics{#1}
+    \end{adjustbox}
+  \end{figure}
+}
+\makeatother
+
+\title{Компьютерная графика}
+\subtitle{Практика 10: Normal mapping, material mapping, environment mapping}
+\date{2026}
+
+\setbeamertemplate{footline}[frame number]
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}[fragile]
+\frametitle{Практика 10}
+\slideimage{0.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+Готовимся к normal mapping
+\begin{itemize}
+\item Выводим нормаль к поверхности вместо цвета:
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+// let color = ...;
+let color = normal * 0.5 + vec3(0.5);
+\end{tcblisting}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 1}
+\slideimage{1.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+Читаем normal map
+\begin{itemize}
+\item Загружаем текстуру \mintinline{cpp}|normal.jpg| аналогично \mintinline{cpp}|albedo.jpg|
+\item Добавляем её в bind group layout и в bind group
+\item Добавляем её binding в шейдер
+\item Во фрагментном шейдере выводим её значение в качестве цвета
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 2}
+\slideimage{2.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+Вычисляем настоящие нормали
+\begin{itemize}
+\item Во фрагментном шейдере вычисляем bitangent вектор как \mintinline{wgsl}|bitangent = cross(normal, tangent)|
+\item Вычисляем матрицу преобразования из normal map в мировые координаты как \mintinline{wgsl}|tbn = mat3x3f(tangent, bitangent, normal)|
+\item Прочитанное из normal map значение переводим из [0, 1] в [-1, 1] и применяем матрицу: \mintinline{wgsl}|real_normal = tbn * (textureSample(...).xyz * 2.0 - vec3f(1.0))|
+\item В качестве цвета используем новую нормаль: \mintinline{wgsl}|color = real_normal * 0.5 + vec3(0.5)|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 3}
+\slideimage{3.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+Используем настоящие нормали для освещения
+\begin{itemize}
+\item Во фрагментном шейдере возвращаем старое вычисление переменной \mintinline{wgsl}|color|
+\item В вычислении освещения используем \mintinline{wgsl}|real_normal| вместо \mintinline{wgsl}|normal|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 4}
+\slideimage{4.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+Готовимся к reflection + material mapping
+\begin{itemize}
+\item Загружаем текстуру \mintinline{cpp}|metalness.jpg| аналогично предыдущим (bind group layout, bind group, binding в шейдере)
+\item Читаем её в шейдере \mintinline{wgsl}|metalness = textureSample(...)|
+\item В качестве цвета выводим \mintinline{wgsl}|vec3f(metalness)|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 5}
+\slideimage{5.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Реализуем reflection mapping
+\begin{itemize}
+\item Загружаем текстуру \mintinline{cpp}|environment_map.jpg| аналогично предыдущим (bind group layout, bind group, binding в шейдере)
+\item Во фрагментном шейдере по положению камеры \mintinline{wgsl}|camera.position| и положению пикселя \mintinline{wgsl}|in.world_position| вычисляем направление на камеру
+\item С помощью новой нормали вычисляем направление отражённого луча: \mintinline{cpp}|dir = reflect(...)|
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+Реализуем reflection mapping
+\begin{itemize}
+\item Вычисляем текстурные координаты для environment map:
+\usemintedstyle{lightbulb}
+\begin{tcblisting}{listing engine=minted, minted language=wgsl, minted options={fontsize=\scriptsize}, listing only, colback=codebg, colframe=codebg, rounded corners}
+x = atan2(dir.z, dir.x) / PI * 0.5 + 0.5
+y = - atan2(dir.y, length(dir.xz)) / PI + 0.5
+\end{tcblisting}
+\usemintedstyle{tango}
+\item Читаем по этим координатам цвет из environment map: \mintinline{wgsl}|reflected_color = textureSample(...)|
+\item В качестве итогого цвета берём \mintinline{wgsl}|mix(color, reflected_color, metalness)| (где \mintinline{wgsl}|color| -- цвет, уже посчитанный из альбедо и освещения)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 6}
+\slideimage{6.png}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+Реализуем environment mapping
+\begin{itemize}
+\item Создаём новые pipeline и шейдер, которые рисуют один полноэкранный прямоугольник (напр. как в первой практике)
+\item Используя матрицу, обратную к view-projection, по ndc-координатам можно восстановить направление в пространстве (см. дополнение к 4ой лекции)
+\item Используем это направление, чтобы прочитать значение из environment map и вывести на экран
+\item \textbf{NB:} Этот pipeline не должен писать в буфер глубины! Для этого нужен или отдельный render pass, или правильная настройка depth-stencil state
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Задание 7*}
+\slideimage{7.png}
+\end{frame}
+
+\end{document}
